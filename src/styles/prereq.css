@@ -1,0 +1,679 @@
+﻿/* ═══════════════════════════════════════════════════════
+   PRE-REQ TRACKER — Alchemist Design System Integration
+   Matches Alchemist Hub styling while preserving PreQ functionality
+   ═══════════════════════════════════════════════════════ */
+
+/* ── PreQ Global Overrides ── */
+.prereq-container {
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #FAF8F5;
+  color: #1F1B17;
+  min-height: 100vh;
+}
+
+/* ── Executive Dashboard ── */
+.prereq-exec-dashboard {
+  padding: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.prereq-header {
+  margin-bottom: 32px;
+}
+
+.prereq-header h1 {
+  font-size: clamp(1.4rem, 1rem + 1.3vw, 1.8rem);
+  font-weight: 600;
+  letter-spacing: -.018em;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.prereq-header .subtitle {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ── Action Bar ── */
+.prereq-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.prereq-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all .15s ease;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.prereq-btn-primary {
+  background: linear-gradient(135deg, #ED7D31 0%, #EA580C 100%);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(184, 137, 43, 0.3);
+}
+
+.prereq-btn-primary:hover {
+  background: linear-gradient(135deg, #C89635 0%, #ED7D31 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(184, 137, 43, 0.4);
+}
+
+.prereq-btn-ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+.prereq-btn-ghost:hover {
+  background: var(--soft);
+  border-color: var(--warm);
+}
+
+.prereq-search {
+  flex: 1;
+  max-width: 320px;
+  position: relative;
+}
+
+.prereq-search input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.prereq-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.prereq-search .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Cards/Sections ── */
+.prereq-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.prereq-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.prereq-card-header h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.prereq-card-body {
+  padding: 22px;
+}
+
+/* ── Table Styling ── */
+.prereq-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--r-sm);
+}
+
+.prereq-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.prereq-table thead {
+  background: var(--soft);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.prereq-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border-bottom: 2px solid var(--line);
+}
+
+.prereq-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.prereq-table tbody tr {
+  transition: background .12s ease;
+}
+
+.prereq-table tbody tr:hover {
+  background: var(--soft);
+}
+
+.prereq-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Status Badges ── */
+.prereq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.prereq-badge-green {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+}
+
+.prereq-badge-yellow {
+  background: color-mix(in srgb, #ED7D31 12%, transparent);
+  color: #EA580C;
+}
+
+.prereq-badge-red {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad);
+}
+
+.prereq-badge-blue {
+  background: color-mix(in srgb, var(--done) 12%, transparent);
+  color: var(--done);
+}
+
+.prereq-badge-gray {
+  background: var(--soft);
+  color: var(--muted);
+}
+
+/* ── Progress Bars ── */
+.prereq-progress {
+  height: 8px;
+  background: var(--soft);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.prereq-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #ED7D31 0%, #EA580C 100%);
+  border-radius: 4px;
+  transition: width .3s ease;
+}
+
+.prereq-progress-bar.warning {
+  background: var(--behind);
+}
+
+.prereq-progress-bar.danger {
+  background: var(--bad);
+}
+
+/* ── Stats Grid ── */
+.prereq-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.prereq-stat-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.prereq-stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+.prereq-stat-label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ── Modals ── */
+.prereq-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.prereq-modal {
+  background: var(--surface);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-pop);
+  max-width: 600px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.prereq-modal-header {
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.prereq-modal-header h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.prereq-modal-body {
+  padding: 24px;
+}
+
+.prereq-modal-footer {
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  background: var(--soft);
+}
+
+/* ── Form Elements ── */
+.prereq-form-group {
+  margin-bottom: 20px;
+}
+
+.prereq-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.prereq-input,
+.prereq-textarea,
+.prereq-select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.prereq-input:focus,
+.prereq-textarea:focus,
+.prereq-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.prereq-textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* ── Upload Zone ── */
+.prereq-dropzone {
+  border: 2px dashed var(--line);
+  border-radius: var(--r);
+  padding: 40px 24px;
+  text-align: center;
+  background: var(--soft);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.prereq-dropzone:hover {
+  border-color: #ED7D31;
+  background: #FBF6ED;
+}
+
+.prereq-dropzone.active {
+  border-color: #ED7D31;
+  background: #FBF6ED;
+  transform: scale(0.98);
+}
+
+.prereq-upload-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  color: var(--muted);
+}
+
+.prereq-upload-text {
+  font-size: 15px;
+  color: var(--ink);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.prereq-upload-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Empty States ── */
+.prereq-empty {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.prereq-empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  opacity: 0.3;
+}
+
+.prereq-empty-text {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+.prereq-empty-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Loading States ── */
+.prereq-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  color: var(--muted);
+}
+
+.prereq-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--soft);
+  border-top-color: #ED7D31;
+  border-radius: 50%;
+  animation: prereq-spin 0.8s linear infinite;
+}
+
+@keyframes prereq-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Filters ── */
+.prereq-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.prereq-filter-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.prereq-filter-btn:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.prereq-filter-btn.active {
+  background: #FBF6ED;
+  color: #EA580C;
+  border-color: #ED7D31;
+  font-weight: 600;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .prereq-exec-dashboard {
+    padding: 20px;
+  }
+
+  .prereq-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prereq-search {
+    max-width: 100%;
+  }
+
+  .prereq-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .prereq-table-wrapper {
+    overflow-x: scroll;
+  }
+}
+
+/* ── Dark Mode Support ── */
+@media (prefers-color-scheme: dark) {
+  .prereq-dropzone {
+    border-color: var(--line);
+  }
+}
+
+
+/* ==========================================================================
+   HUB ALIGNMENT OVERRIDES
+   PreQ pages were built as full-bleed standalone screens (own 100vh canvas,
+   white header band, 1680px container, oversized type). Inside the Alchemist
+   hub they sit in <main> (already padded) so they looked large and different.
+   These rules scope everything to .prereq-container and normalise it to the
+   hub's scale: flat header, no double padding, hub typography and controls.
+   ========================================================================== */
+.prereq-container {
+  min-height: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+}
+
+/* page root: drop the standalone canvas */
+.prereq-container > div {
+  min-height: 0 !important;
+  padding-bottom: 0 !important;
+  background: transparent !important;
+}
+
+/* the hub's <main> already supplies the gutters */
+.prereq-container .goml-container {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* header band -> flat, same as other hub views */
+.prereq-container > div > section:first-of-type {
+  background: transparent !important;
+  border-bottom: 0 !important;
+  padding: 0 0 12px !important;
+}
+.prereq-container > div > section {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* typography scale (matches global h1/h2 in styles.css) */
+.prereq-container h1 {
+  font-size: clamp(1.4rem, 1rem + 1.3vw, 1.8rem) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.025em !important;
+  line-height: 1.2 !important;
+}
+.prereq-container h2 {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+}
+.prereq-container h3 {
+  font-size: 15px !important;
+  font-weight: 650 !important;
+}
+.prereq-container [style*="font-size: 2.1rem"],
+.prereq-container [style*="font-size: 2rem"] { font-size: 1.5rem !important; }
+.prereq-container [style*="font-size: 1.75rem"] { font-size: 1.4rem !important; }
+.prereq-container [style*="font-size: 1.35rem"] { font-size: 1.1rem !important; }
+.prereq-container [style*="font-weight: 900"] { font-weight: 700 !important; }
+
+/* cards: hub radius + shadow instead of heavier custom ones */
+.prereq-container [style*="border-radius: 20px"],
+.prereq-container [style*="border-radius: 18px"] { border-radius: var(--r) !important; }
+
+/* ---- Create Project screen (was sized as a marketing page) ---- */
+.prereq-container > div[style*="align-items: center"][style*="flex-direction: column"] {
+  padding: 8px 0 32px !important;
+  min-height: 0 !important;
+}
+.prereq-container h1[style*="2.5rem"] { margin-bottom: 6px !important; }
+.prereq-container h2[style*="2.25rem"] { font-size: 1.4rem !important; }
+.prereq-container p[style*="1.125rem"],
+.prereq-container p[style*="font-size: 1.1rem"] { font-size: 14.5px !important; font-weight: 400 !important; }
+.prereq-container button[style*="font-size: 16.5px"],
+.prereq-container button[style*="font-size: 16px"] {
+  font-size: 13.5px !important;
+  padding: 9px 20px !important;
+}
+.prereq-container [style*="padding: 7px"][style*="border: 2px solid"] { padding: 4px !important; border-width: 1px !important; }
+.prereq-container [style*="font-size: 15px"] { font-size: 13.5px !important; }
+.prereq-container [style*="font-size: 17px"],
+.prereq-container [style*="font-size: 18px"] { font-size: 14.5px !important; }
+
+@keyframes popInDialog {
+  from { transform: scale(0.97); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ==========================================================================
+   HUB CONTROL + CARD STYLE
+   Pill buttons/chips and heavy borders -> the hub's rounded-rect controls.
+   ========================================================================== */
+.prereq-container button[style*="border-radius: 9999px"],
+.prereq-container a[style*="border-radius: 9999px"] {
+  border-radius: var(--r-sm) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  min-height: 32px;
+  height: auto !important;
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+}
+.prereq-container button[style*="border: 2px solid"],
+.prereq-container a[style*="border: 2px solid"],
+.prereq-container button[style*="border: 1.5px solid"],
+.prereq-container a[style*="border: 1.5px solid"] {
+  border-width: 1px !important;
+}
+.prereq-container button[style*="border: 2px solid rgb(230, 225, 219)"],
+.prereq-container a[style*="border: 2px solid rgb(230, 225, 219)"] {
+  border-color: var(--line) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+.prereq-container button[style*="border: 2px solid rgb(230, 225, 219)"]:hover,
+.prereq-container a[style*="border: 2px solid rgb(230, 225, 219)"]:hover {
+  border-color: var(--warm) !important;
+  background: var(--soft) !important;
+}
+
+/* status / meta badges stay small pills but quieter */
+.prereq-container span[style*="border-radius: 9999px"] {
+  font-weight: 600 !important;
+}
+
+/* cards: hub radius, border and shadow */
+.prereq-container [style*="border-radius: 24px"],
+.prereq-container [style*="border-radius: 22px"],
+.prereq-container [style*="border-radius: 20px"],
+.prereq-container [style*="border-radius: 18px"],
+.prereq-container [style*="border-radius: 16px"] {
+  border-radius: var(--r) !important;
+}
+.prereq-container [style*="border: 1px solid rgb(230, 225, 219)"] {
+  border-color: var(--line) !important;
+}
+
+.prereq-aimatic-btn { white-space: nowrap; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 760px) {
+  .prereq-context-body { flex-direction: column; }
+  .prereq-context-body > div:first-child { width: auto !important; max-height: 200px; border-right: 0 !important; border-bottom: 1px solid var(--line); }
+}
