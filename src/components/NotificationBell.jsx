@@ -4,7 +4,7 @@ import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing } from 'lucide-r
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { AUTH_API_URL } from '../apiConfig';
-import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed } from '../services/push';
+import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed, sendTestNotification } from '../services/push';
 
 const KIND = {
   leave: { Icon: CalendarDays, tone: 'leave' },
@@ -57,12 +57,16 @@ export default function NotificationBell() {
     let alive = true;
     (async () => {
       await resyncIfAllowed();
-      const sub = await currentSubscription();
+      let sub = await currentSubscription();
+      // permission was already granted (e.g. earlier) but this device is not registered: register it quietly
+      if (!sub && support.ok && Notification.permission === 'granted') {
+        try { await enableDeviceNotifications(); sub = await currentSubscription(); } catch { /* shown when they open the panel */ }
+      }
       if (!alive) return;
       setDeviceOn(!!sub && Notification.permission === 'granted');
       // one friendly nudge per device, only if it could work and hasn't been answered
       let asked = false;
-      try { asked = !!localStorage.getItem('alchemist-push-asked'); } catch { /* ignore */ }
+      try { asked = !!sessionStorage.getItem('alchemist-push-asked'); } catch { /* ignore */ }
       if (!asked && support.ok && Notification.permission === 'default' && !sub) setTimeout(() => alive && setAskBanner(true), 4000);
     })();
     return () => { alive = false; };
@@ -88,7 +92,7 @@ export default function NotificationBell() {
 
   const dismissAsk = () => {
     setAskBanner(false);
-    try { localStorage.setItem('alchemist-push-asked', '1'); } catch { /* ignore */ }
+    try { sessionStorage.setItem('alchemist-push-asked', '1'); } catch { /* ignore */ }
   };
 
   const turnOnDevice = async () => {
@@ -101,6 +105,19 @@ export default function NotificationBell() {
     } catch (err) {
       setDeviceMsg(err.message || 'Could not turn on device notifications.');
       if (typeof Notification !== 'undefined') setPerm(Notification.permission);
+    } finally { setDeviceBusy(false); }
+  };
+
+  const sendTest = async () => {
+    setDeviceBusy(true); setDeviceMsg('');
+    try {
+      const r = await sendTestNotification();
+      setDeviceMsg(r.devices === 0
+        ? 'No device is registered for your account yet. Press Turn on on the device you want.'
+        : r.pushed === 0 ? 'Your device did not accept it. Turn notifications off and on again.'
+        : `Sample sent to ${r.pushed} ${r.pushed === 1 ? 'device' : 'devices'}. It should appear in a few seconds.`);
+    } catch {
+      setDeviceMsg('Could not send the sample. Check your connection and try again.');
     } finally { setDeviceBusy(false); }
   };
 
@@ -124,6 +141,7 @@ export default function NotificationBell() {
       >
         <Bell size={18} />
         {unread > 0 && <span className="nbell-badge">{unread > 99 ? '99+' : unread}</span>}
+        {unread === 0 && support.ok && !deviceOn && perm !== 'denied' && <span className="nbell-attn" title="Turn on device notifications" />}
       </button>
 
       {open && createPortal(
@@ -179,7 +197,10 @@ export default function NotificationBell() {
               <div className="npd-row on">
                 <span className="npd-ico"><BellRing size={16} /></span>
                 <span className="npd-text"><b>Device notifications are on</b><small>You will get them on this device even when Alchemist is closed.</small></span>
-                <button type="button" className="npd-btn ghost" onClick={turnOffDevice} disabled={deviceBusy}>Turn off</button>
+                <span className="npd-actions">
+                  <button type="button" className="npd-btn" onClick={sendTest} disabled={deviceBusy}>Send test</button>
+                  <button type="button" className="npd-btn ghost" onClick={turnOffDevice} disabled={deviceBusy}>Turn off</button>
+                </span>
               </div>
             ) : support.ok ? (
               perm === 'denied' ? (

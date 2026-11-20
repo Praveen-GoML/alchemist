@@ -216,6 +216,7 @@ class NotificationCreate(BaseModel):
     title: str
     body: str = ""
     link: str = ""
+    to_self: bool = False        # also notify the person who is sending (e.g. "your attendance was submitted")
 
 class NotificationOut(BaseModel):
     id: int

@@ -49,7 +49,12 @@ export function notifyLeaveSubmitted({ who, adds = [], removes = [] }) {
   const title = a.length
     ? `${who} applied for ${[...byLabel.keys()].map(l => l.toLowerCase()).join(' and ')}`
     : `${who} cancelled leave`;
-  return sendNotification({ roles: ['pm', 'tl'], kind: 'leave', title, body: parts.join(' · '), link: '#leave' });
+  const body = parts.join(' · ');
+  // 1) tell the PMs and TLs, 2) confirm to the person themselves (shows on their own phone and computer)
+  return Promise.all([
+    sendNotification({ roles: ['pm', 'tl'], kind: 'leave', title, body, link: '#leave' }),
+    sendNotification({ to_self: true, kind: 'leave', title: a.length ? 'Attendance submitted' : 'Attendance updated', body: `${body}. Your PMs and TLs have been notified.`, link: '#leave' }),
+  ]);
 }
 
 /* ── Project assignment ── */

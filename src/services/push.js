@@ -105,3 +105,17 @@ export async function resyncIfAllowed() {
     await api.post(`${AUTH_API_URL}/push/subscribe`, { endpoint: json.endpoint, keys: json.keys });
   } catch { /* ignore */ }
 }
+
+/** Sends a sample notification to this person's own devices. Returns { devices, pushed }. */
+export async function sendTestNotification() {
+  const { data } = await api.post(`${AUTH_API_URL}/push/test`);
+  return data;
+}
+
+/** How many devices the server will notify for the signed-in person. */
+export async function deviceCount() {
+  try {
+    const { data } = await api.get(`${AUTH_API_URL}/push/status`);
+    return data?.devices ?? 0;
+  } catch { return 0; }
+}

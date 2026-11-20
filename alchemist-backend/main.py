@@ -510,6 +510,8 @@ def create_notifications(
         for (email,) in db.query(User.email).filter(User.is_active == True, func.lower(User.role).in_(roles)):  # noqa: E712
             emails.add(email.lower())
     emails.discard(current_user.email.lower())
+    if payload.to_self:
+        emails.add(current_user.email.lower())   # a confirmation for the sender; always allowed
     if len(emails) > MAX_RECIPIENTS:
         raise HTTPException(status_code=400, detail="Too many recipients.")
 
@@ -580,6 +582,40 @@ def push_subscribe(
         ))
     db.commit()
     return {"subscribed": True}
+
+
+@app.get("/push/status")
+def push_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """How many of the signed-in user's devices will receive device notifications."""
+    n = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == current_user.email.lower()).count()
+    return {"enabled": push_service.is_configured(), "devices": n}
+
+
+@app.post("/push/test")
+def push_test(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Send a sample notification to the signed-in user's own devices."""
+    row = Notification(
+        recipient_email=current_user.email.lower(), kind="info",
+        title="Test notification",
+        body="If you can see this on your phone or computer, device notifications are working.",
+        link="", actor_name="Alchemist", actor_email="",
+    )
+    db.add(row)
+    db.commit()
+    subs = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == current_user.email.lower()).all()
+    if not subs:
+        return {"devices": 0, "pushed": 0}
+    dead = push_service.send_to_subscriptions(subs, row.title, row.body, "", row.id)
+    if dead:
+        db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
+        db.commit()
+    return {"devices": len(subs), "pushed": len(subs) - len(dead)}
 
 
 @app.post("/push/unsubscribe")
