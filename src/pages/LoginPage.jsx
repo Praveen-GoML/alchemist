@@ -1,23 +1,8 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Loader2, ArrowRight, ClipboardCheck, Sparkles, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/goml_logo.png';
 import logoWhite from '../assets/goml_logo_white.png';
-
-const FEATURES = [
-  { icon: ClipboardCheck, title: 'Pre-requisite tracking', text: 'Know exactly what is blocking kick-off, and who owns it.' },
-  { icon: Sparkles, title: 'AI-assisted analysis', text: 'Turn a SOW into requirements, risks and a delivery checklist.' },
-  { icon: ShieldCheck, title: 'Secure client handover', text: 'Clients share credentials and evidence through an encrypted portal.' },
-];
-
-const inputWrap = { position: 'relative' };
-const inputStyle = {
-  width: '100%', boxSizing: 'border-box', margin: 0, padding: '11px 40px 11px 40px', fontSize: 14, fontFamily: 'inherit',
-  border: '1px solid #E6E1DB', borderRadius: 10, background: '#FFFFFF', color: '#1F1B17', outline: 'none',
-  transition: 'border-color .15s ease, box-shadow .15s ease',
-};
-const focusOn = (e) => { e.target.style.borderColor = '#F28C28'; e.target.style.boxShadow = '0 0 0 3px rgba(242,140,40,.15)'; };
-const focusOff = (e) => { e.target.style.borderColor = '#E6E1DB'; e.target.style.boxShadow = 'none'; };
 
 export const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -42,108 +27,101 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="lg-root" style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', background: '#FAF8F5', fontFamily: "'Plus Jakarta Sans','Inter',sans-serif" }}>
-      {/* Brand panel */}
-      <aside className="lg-brand" style={{
-        position: 'relative', overflow: 'hidden', padding: '48px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        color: '#fff', background: 'linear-gradient(155deg, #2A211A 0%, #1F1B17 55%, #3A2410 100%)',
-      }}>
-        <div aria-hidden style={{ position: 'absolute', width: 520, height: 520, right: -180, top: -160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(242,140,40,.35), rgba(242,140,40,0) 70%)' }} />
-        <div aria-hidden style={{ position: 'absolute', width: 420, height: 420, left: -160, bottom: -170, borderRadius: '50%', background: 'radial-gradient(circle, rgba(242,140,40,.18), rgba(242,140,40,0) 70%)' }} />
+    <div className="lg2">
+      <span className="lg2-blob a" aria-hidden="true" />
+      <span className="lg2-blob b" aria-hidden="true" />
 
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src={logoWhite} alt="goML" style={{ height: 30, display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', padding: '3px 8px', borderRadius: 6, background: '#F28C28', color: '#fff' }}>ALCHEMIST</span>
-        </div>
-
-        <div style={{ position: 'relative', maxWidth: 520 }}>
-          <h2 style={{ margin: 0, fontSize: 36, lineHeight: 1.15, fontWeight: 700, letterSpacing: '-0.02em', color: '#fff' }}>
-            From signed SOW to a clear, unblocked kick-off.
-          </h2>
-          <p style={{ margin: '14px 0 32px', fontSize: 15.5, lineHeight: 1.6, color: 'rgba(255,255,255,.72)' }}>
-            Alchemist keeps every pre-requisite, credential and client dependency in one place so delivery starts on day one.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {FEATURES.map(({ icon: Icon, title, text }) => (
-              <div key={title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(242,140,40,.16)', border: '1px solid rgba(242,140,40,.35)', color: '#F8A850' }}>
-                  <Icon size={18} />
-                </span>
-                <div>
-                  <div style={{ fontSize: 14.5, fontWeight: 650 }}>{title}</div>
-                  <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'rgba(255,255,255,.65)', marginTop: 2 }}>{text}</div>
-                </div>
-              </div>
-            ))}
+      <main className="lg2-wrap">
+        <div className="lg2-card">
+          <div className="lg2-brand">
+            <img className="lg2-logo light" src={logo} alt="goML" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            <img className="lg2-logo dark" src={logoWhite} alt="" aria-hidden="true" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </div>
-        </div>
 
-        <div style={{ position: 'relative', fontSize: 12.5, color: 'rgba(255,255,255,.5)' }}>goML &middot; Internal tooling</div>
-      </aside>
+          <h1>Welcome back</h1>
+          <p className="lg2-sub">Sign in to continue to Alchemist.</p>
 
-      {/* Form panel */}
-      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
-        <div style={{ width: '100%', maxWidth: 410 }}>
-          <img className="lg-mobile-logo" src={logo} alt="goML" style={{ height: 28, marginBottom: 28, display: 'none' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: '#1F1B17' }}>Welcome back</h1>
-          <p style={{ margin: '8px 0 26px', fontSize: 14.5, color: '#6E6862' }}>Sign in to your Alchemist account.</p>
+          {error && <div role="alert" className="lg2-error">{error}</div>}
 
-          {error && (
-            <div role="alert" style={{ background: '#FEF2F2', color: '#B42318', padding: '11px 13px', borderRadius: 10, marginBottom: 18, fontSize: 13.5, border: '1px solid #FECACA' }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <label style={{ display: 'block', marginBottom: 16 }}>
-              <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#1F1B17' }}>Work email</span>
-              <div style={inputWrap}>
-                <Mail size={16} style={{ position: 'absolute', left: 13, top: 13, color: '#9A928A' }} />
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username"
-                  placeholder="name@goml.io" style={inputStyle} onFocus={focusOn} onBlur={focusOff} />
+          <form onSubmit={handleSubmit} noValidate={false}>
+            <label className="lg2-field">
+              <span>Work email</span>
+              <div className="lg2-input">
+                <Mail size={17} aria-hidden="true" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username" placeholder="name@goml.io" />
               </div>
             </label>
 
-            <label style={{ display: 'block', marginBottom: 22 }}>
-              <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#1F1B17' }}>Password</span>
-              <div style={inputWrap}>
-                <Lock size={16} style={{ position: 'absolute', left: 13, top: 13, color: '#9A928A' }} />
-                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password"
-                  placeholder="Enter your password" style={inputStyle} onFocus={focusOn} onBlur={focusOff} />
-                <button type="button" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? 'Hide password' : 'Show password'}
-                  style={{ position: 'absolute', right: 6, top: 5, background: 'transparent', border: 0, padding: 7, cursor: 'pointer', color: '#9A928A', display: 'inline-flex', borderRadius: 8 }}>
-                  {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+            <label className="lg2-field">
+              <span>Password</span>
+              <div className="lg2-input">
+                <Lock size={17} aria-hidden="true" />
+                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="Enter your password" />
+                <button type="button" className="lg2-eye" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? 'Hide password' : 'Show password'}>
+                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </label>
 
-            <button type="submit" disabled={loading}
-              style={{
-                width: '100%', padding: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                background: loading ? '#C9A27A' : '#F28C28', color: '#fff', border: 0, borderRadius: 10, fontWeight: 650, fontSize: 14.5,
-                fontFamily: 'inherit', cursor: loading ? 'not-allowed' : 'pointer', transition: 'background .15s ease, transform .05s ease',
-                boxShadow: '0 1px 2px rgba(224,118,26,.35)',
-              }}
-              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = '#E0761A'; }}
-              onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = '#F28C28'; }}
-            >
-              {loading ? (<><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Signing in...</>) : (<>Sign in <ArrowRight size={16} /></>)}
+            <button type="submit" className="lg2-btn" disabled={loading}>
+              {loading ? (<><Loader2 size={17} className="lg2-spin" /> Signing in…</>) : (<>Sign in <ArrowRight size={17} /></>)}
             </button>
           </form>
 
-          <p style={{ marginTop: 26, textAlign: 'center', fontSize: 12.5, color: '#9A928A' }}>
-            Trouble signing in? Contact your goML administrator.
-          </p>
+          <p className="lg2-help">Trouble signing in? Contact your goML administrator.</p>
         </div>
       </main>
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 900px) {
-          .lg-root { grid-template-columns: 1fr !important; }
-          .lg-brand { display: none !important; }
-          .lg-mobile-logo { display: block !important; }
+        .lg2 { --bg: #FBF7F2; --card: #FFFFFF; --ink: #1F1B17; --muted: #6E6862; --line: #E8E2DA; --field: #FFFFFF; --glow: rgba(242,140,40,.20);
+          position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; overflow: hidden; background: var(--bg); color: var(--ink);
+          font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+        .lg2-blob { position: absolute; border-radius: 50%; pointer-events: none; filter: blur(10px); }
+        .lg2-blob.a { width: 560px; height: 560px; right: -160px; top: -200px; background: radial-gradient(circle, var(--glow), transparent 66%); }
+        .lg2-blob.b { width: 520px; height: 520px; left: -200px; bottom: -220px; background: radial-gradient(circle, rgba(242,140,40,.12), transparent 66%); }
+        .lg2-wrap { position: relative; width: 100%; padding: 24px 16px; display: grid; place-items: center; }
+        .lg2-card { width: min(420px, 100%); box-sizing: border-box; background: var(--card); border-radius: 28px; padding: 40px 36px 30px;
+          box-shadow: 0 1px 2px rgba(31,27,23,.05), 0 24px 60px rgba(31,27,23,.10); animation: lg2-in .4s ease both; }
+        .lg2-brand { display: flex; justify-content: center; margin-bottom: 26px; }
+        .lg2-logo { height: 34px; display: block; }
+        .lg2-logo.dark { display: none; transform: translateX(18px); } /* the white logo asset has blank space on its right */
+        .lg2 h1 { margin: 0; text-align: center; font-size: 27px; font-weight: 800; letter-spacing: -.03em; }
+        .lg2-sub { margin: 8px 0 26px; text-align: center; font-size: 14.5px; color: var(--muted); }
+        .lg2-error { margin-bottom: 18px; padding: 11px 14px; border-radius: 12px; font-size: 13.5px; background: #FFF1E6; color: #B4501A; }
+        .lg2-field { display: block; margin-bottom: 16px; }
+        .lg2-field > span { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 600; }
+        .lg2-input { position: relative; }
+        .lg2-input > svg { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+        .lg2-input input { width: 100%; box-sizing: border-box; height: 48px; margin: 0; padding: 0 44px 0 44px; font: inherit; font-size: 14.5px; color: var(--ink);
+          background: var(--field); border: 1px solid var(--line); border-radius: 14px; outline: none; transition: border-color .15s, box-shadow .15s; }
+        .lg2-input input::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
+        .lg2-input input:focus { border-color: #F28C28; box-shadow: 0 0 0 4px rgba(242,140,40,.16); }
+        .lg2-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; }
+        .lg2-eye:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+        .lg2-btn { width: 100%; height: 50px; margin-top: 8px; border: 0; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+          background: linear-gradient(135deg, #F7992F, #EA7A1E); color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+          box-shadow: 0 8px 22px rgba(237,125,49,.35); transition: transform .12s, box-shadow .12s, filter .12s; }
+        .lg2-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(237,125,49,.42); filter: brightness(1.04); }
+        .lg2-btn:active:not(:disabled) { transform: translateY(0); }
+        .lg2-btn:disabled { opacity: .7; cursor: not-allowed; }
+        .lg2-spin { animation: lg2-spin 1s linear infinite; }
+        .lg2-help { margin: 22px 0 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+        @keyframes lg2-spin { to { transform: rotate(360deg); } }
+        @keyframes lg2-in { from { opacity: 0; transform: translateY(10px); } }
+
+        /* dark theme */
+        :root[data-theme="dark"] .lg2 { --bg: #14110F; --card: #1D1916; --ink: #F4EEE8; --muted: #A89F96; --line: #34302C; --field: #14110F; --glow: rgba(242,140,40,.16); }
+        :root[data-theme="dark"] .lg2-logo.light { display: none; } :root[data-theme="dark"] .lg2-logo.dark { display: block; }
+        :root[data-theme="dark"] .lg2-card { box-shadow: 0 0 0 1px rgba(255,255,255,.05), 0 24px 60px rgba(0,0,0,.45); }
+        :root[data-theme="dark"] .lg2-error { background: rgba(242,140,40,.14); color: #FFB067; }
+        @media (prefers-color-scheme: dark) {
+          :root:not([data-theme="light"]) .lg2 { --bg: #14110F; --card: #1D1916; --ink: #F4EEE8; --muted: #A89F96; --line: #34302C; --field: #14110F; --glow: rgba(242,140,40,.16); }
+          :root:not([data-theme="light"]) .lg2-logo.light { display: none; } :root:not([data-theme="light"]) .lg2-logo.dark { display: block; }
+          :root:not([data-theme="light"]) .lg2-card { box-shadow: 0 0 0 1px rgba(255,255,255,.05), 0 24px 60px rgba(0,0,0,.45); }
+          :root:not([data-theme="light"]) .lg2-error { background: rgba(242,140,40,.14); color: #FFB067; }
         }
+        @media (max-width: 480px) { .lg2-card { padding: 32px 22px 24px; border-radius: 24px; } .lg2 h1 { font-size: 24px; } }
+        @media (prefers-reduced-motion: reduce) { .lg2-card, .lg2-spin { animation: none; } }
       `}</style>
     </div>
   );

@@ -363,7 +363,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search initiatives by name, client, industry, cloud or type…"
+                  placeholder="Search initiatives…" title="Search by name, client, industry, cloud or type"
                   aria-label="Search initiatives"
                 />
                 {search && (

@@ -94,7 +94,7 @@ export default function Projects({ data, updateData, ui, setUi }) {
   const { projects=[], members=[], checklist={}, clProjects=[], items=[], matrixProjects=[] } = data;
   const [dlgProj, setDlgProj] = useState(null); // null=closed, {}=new, proj=edit
 
-  const { psort={k:'sno',dir:-1}, pf=[], pq='', powner='', projView='list', pop=null } = ui;
+  const { psort={k:'sno',dir:-1}, pf=[], pq='', powner='', projView=(typeof window !== 'undefined' && window.innerWidth < 700 ? 'tile' : 'list'), pop=null } = ui;
   const set = patch => setUi(prev => ({...prev, ...patch}));
 
   // Compute member's assigned projects (null = see all, [] = see none)

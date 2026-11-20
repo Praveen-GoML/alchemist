@@ -124,6 +124,7 @@ function AuthenticatedApp() {
     <div className={`app${ui.collapsed ? ' collapsed' : ''}${navOpen ? ' navopen' : ''}`}>
       <Sidebar 
         view={ui.view} 
+        data={data}
         onToggleCollapse={toggleCollapse} 
         onNavigate={() => setNavOpen(false)}
       />
