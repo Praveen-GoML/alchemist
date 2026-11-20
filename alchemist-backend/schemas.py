@@ -233,3 +233,15 @@ class NotificationOut(BaseModel):
 class NotificationRead(BaseModel):
     ids: List[int] = []
     all: bool = False
+
+
+class PushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+class PushSubscribe(BaseModel):
+    endpoint: str
+    keys: PushKeys
+
+class PushUnsubscribe(BaseModel):
+    endpoint: str

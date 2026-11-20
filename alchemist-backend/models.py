@@ -131,3 +131,16 @@ class Notification(Base):
     actor_email = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     read_at = Column(DateTime, nullable=True)
+
+
+class PushSubscription(Base):
+    """A browser/phone that agreed to receive device notifications for a user."""
+    __tablename__ = "alchemist_push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, index=True, nullable=False)
+    endpoint = Column(Text, unique=True, nullable=False)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    user_agent = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)

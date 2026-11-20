@@ -11,8 +11,9 @@ from sqlalchemy import func
 from typing import List
 
 import dropbox_storage
+import push_service
 from database import engine, get_db
-from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification
+from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification, PushSubscription
 from schemas import *
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
@@ -512,14 +513,87 @@ def create_notifications(
     if len(emails) > MAX_RECIPIENTS:
         raise HTTPException(status_code=400, detail="Too many recipients.")
 
+    rows = []
     for email in emails:
-        db.add(Notification(
+        row = Notification(
             recipient_email=email, kind=kind, title=title,
             body=(payload.body or "").strip()[:1000], link=(payload.link or "")[:200],
             actor_name=current_user.name, actor_email=current_user.email,
+        )
+        db.add(row)
+        rows.append(row)
+    db.commit()
+
+    # Also show it on their devices (phone / Windows notification centre), even when the app is closed.
+    pushed = 0
+    if rows and push_service.is_configured():
+        for row in rows:
+            subs = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == row.recipient_email.lower()).all()
+            if not subs:
+                continue
+            dead = push_service.send_to_subscriptions(subs, f"{row.title}", row.body, row.link or "", row.id)
+            pushed += len(subs) - len(dead)
+            if dead:
+                db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
+                db.commit()
+    return {"created": len(emails), "pushed": pushed}
+
+
+# ── Device push subscriptions ──
+MAX_SUBSCRIPTIONS_PER_USER = 10
+
+
+@app.get("/push/public-key")
+def push_public_key():
+    """Public VAPID key the browser needs to subscribe. Empty when push is not configured."""
+    return {"enabled": push_service.is_configured(), "key": push_service.public_key()}
+
+
+@app.post("/push/subscribe")
+def push_subscribe(
+    payload: PushSubscribe,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if not push_service.is_configured():
+        raise HTTPException(status_code=503, detail="Device notifications are not configured on the server.")
+    endpoint = payload.endpoint.strip()
+    if not endpoint.startswith("https://") or len(endpoint) > 2000:
+        raise HTTPException(status_code=400, detail="Invalid subscription endpoint.")
+
+    existing = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
+    if existing:
+        # same device, possibly a different person signed in now: move it to the current user
+        existing.user_email = current_user.email
+        existing.p256dh, existing.auth = payload.keys.p256dh, payload.keys.auth
+    else:
+        count = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == current_user.email.lower()).count()
+        if count >= MAX_SUBSCRIPTIONS_PER_USER:
+            oldest = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == current_user.email.lower()).order_by(PushSubscription.created_at).first()
+            if oldest:
+                db.delete(oldest)
+        db.add(PushSubscription(
+            user_email=current_user.email, endpoint=endpoint,
+            p256dh=payload.keys.p256dh, auth=payload.keys.auth,
+            user_agent=(request.headers.get("user-agent") or "")[:200],
         ))
     db.commit()
-    return {"created": len(emails)}
+    return {"subscribed": True}
+
+
+@app.post("/push/unsubscribe")
+def push_unsubscribe(
+    payload: PushUnsubscribe,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    db.query(PushSubscription).filter(
+        PushSubscription.endpoint == payload.endpoint,
+        func.lower(PushSubscription.user_email) == current_user.email.lower(),
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"subscribed": False}
 
 
 @app.post("/notifications/read")
