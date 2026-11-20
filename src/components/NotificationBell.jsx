@@ -4,6 +4,7 @@ import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing } from 'lucide-r
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { AUTH_API_URL } from '../apiConfig';
+import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed } from '../services/push';
 
 const KIND = {
   leave: { Icon: CalendarDays, tone: 'leave' },
@@ -26,7 +27,15 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('all');
   const [toast, setToast] = useState(null);
+  // device notifications (Web Push)
+  const support = pushSupport();
   const [perm, setPerm] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'denied'));
+  const [deviceOn, setDeviceOn] = useState(false);
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [deviceMsg, setDeviceMsg] = useState('');
+  const [askBanner, setAskBanner] = useState(false);
+  const deviceOnRef = useRef(false);
+  deviceOnRef.current = deviceOn;
   const btnRef = useRef(null);
   const panelRef = useRef(null);
   const [pos, setPos] = useState({ top: 64, right: 16 });
@@ -36,12 +45,29 @@ export default function NotificationBell() {
     setToast(fresh.length > 1 ? { title: `${fresh.length} new notifications`, body: n.title } : { title: n.title, body: n.body });
     setTimeout(() => setToast(null), 6000);
     // desktop alert when the tab is in the background
-    if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    if (!deviceOnRef.current && document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try { new Notification(n.title, { body: n.body, tag: `alchemist-${n.id}` }); } catch { /* ignore */ }
     }
   }, []);
 
   const { items, unread, loaded, read, readAll, remove } = useNotifications({ enabled: !!user && !!AUTH_API_URL, onNew });
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let alive = true;
+    (async () => {
+      await resyncIfAllowed();
+      const sub = await currentSubscription();
+      if (!alive) return;
+      setDeviceOn(!!sub && Notification.permission === 'granted');
+      // one friendly nudge per device, only if it could work and hasn't been answered
+      let asked = false;
+      try { asked = !!localStorage.getItem('alchemist-push-asked'); } catch { /* ignore */ }
+      if (!asked && support.ok && Notification.permission === 'default' && !sub) setTimeout(() => alive && setAskBanner(true), 4000);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -60,12 +86,30 @@ export default function NotificationBell() {
     if (n.link) window.location.hash = n.link.replace(/^#?/, '#');
   };
 
-  const enableDesktop = async () => {
-    try { setPerm(await Notification.requestPermission()); } catch { /* ignore */ }
+  const dismissAsk = () => {
+    setAskBanner(false);
+    try { localStorage.setItem('alchemist-push-asked', '1'); } catch { /* ignore */ }
+  };
+
+  const turnOnDevice = async () => {
+    setDeviceBusy(true); setDeviceMsg('');
+    try {
+      await enableDeviceNotifications();
+      setDeviceOn(true);
+      setPerm(Notification.permission);
+      dismissAsk();
+    } catch (err) {
+      setDeviceMsg(err.message || 'Could not turn on device notifications.');
+      if (typeof Notification !== 'undefined') setPerm(Notification.permission);
+    } finally { setDeviceBusy(false); }
+  };
+
+  const turnOffDevice = async () => {
+    setDeviceBusy(true); setDeviceMsg('');
+    try { await disableDeviceNotifications(); setDeviceOn(false); } finally { setDeviceBusy(false); }
   };
 
   const shown = tab === 'unread' ? items.filter(n => !n.read_at) : items;
-  const canAskDesktop = typeof Notification !== 'undefined' && perm === 'default';
 
   return (
     <>
@@ -130,11 +174,39 @@ export default function NotificationBell() {
             })}
           </ul>
 
-          {canAskDesktop && (
-            <button type="button" className="npanel-foot" onClick={enableDesktop}>
-              <BellRing size={15} /> Turn on desktop alerts
-            </button>
-          )}
+          <div className="npanel-device">
+            {deviceOn ? (
+              <div className="npd-row on">
+                <span className="npd-ico"><BellRing size={16} /></span>
+                <span className="npd-text"><b>Device notifications are on</b><small>You will get them on this device even when Alchemist is closed.</small></span>
+                <button type="button" className="npd-btn ghost" onClick={turnOffDevice} disabled={deviceBusy}>Turn off</button>
+              </div>
+            ) : support.ok ? (
+              perm === 'denied' ? (
+                <div className="npd-row"><span className="npd-ico"><BellRing size={16} /></span><span className="npd-text"><b>Blocked in your browser</b><small>Allow notifications for this site in the browser settings, then come back.</small></span></div>
+              ) : (
+                <div className="npd-row">
+                  <span className="npd-ico"><BellRing size={16} /></span>
+                  <span className="npd-text"><b>Get notified on this device</b><small>Like a phone notification, even when the app is closed.</small></span>
+                  <button type="button" className="npd-btn" onClick={turnOnDevice} disabled={deviceBusy}>{deviceBusy ? 'Turning on…' : 'Turn on'}</button>
+                </div>
+              )
+            ) : support.reason === 'ios-install' ? (
+              <div className="npd-row"><span className="npd-ico"><BellRing size={16} /></span><span className="npd-text"><b>Add Alchemist to your Home Screen</b><small>On iPhone: tap Share, then “Add to Home Screen”, and open Alchemist from there to turn on notifications.</small></span></div>
+            ) : null}
+            {deviceMsg && <p className="npd-err" role="alert">{deviceMsg}</p>}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {askBanner && !open && createPortal(
+        <div className="ntoast ask" role="dialog" aria-label="Turn on device notifications">
+          <span className="nico assign"><BellRing size={17} /></span>
+          <span className="ntext"><b>Get notified on this device</b><span>Leave requests and project assignments, like a phone notification, even when the app is closed.</span>
+            <span className="ask-actions"><button type="button" onClick={turnOnDevice} disabled={deviceBusy}>{deviceBusy ? 'Turning on…' : 'Turn on'}</button><button type="button" className="ghost" onClick={dismissAsk}>Not now</button></span>
+          </span>
+          <button type="button" aria-label="Close" onClick={dismissAsk}><X size={14} /></button>
         </div>,
         document.body
       )}

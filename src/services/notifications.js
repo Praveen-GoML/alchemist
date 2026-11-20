@@ -25,45 +25,31 @@ export function sendNotification(payload) {
   return api.post(base(), payload).catch(() => {});
 }
 
-/* ── Leave: several days clicked in a row become one notification ── */
-const WINDOW_MS = 6000;
-let leaveBatch = null; // { who, label, dates:Set, timer }
-
+/* ── Leave: one summary message when the person submits their attendance ── */
 const fmtDay = (iso) => {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
-
-function flushLeave() {
-  if (!leaveBatch) return;
-  const { who, label, dates } = leaveBatch;
-  leaveBatch = null;
-  if (!dates.size) return;
+const fmtList = (dates) => {
   const sorted = [...dates].sort();
-  const text = sorted.length <= 4 ? sorted.map(fmtDay).join(', ') : `${fmtDay(sorted[0])} to ${fmtDay(sorted[sorted.length - 1])} (${sorted.length} days)`;
-  sendNotification({
-    roles: ['pm', 'tl'],
-    kind: 'leave',
-    title: `${who} applied for ${label.toLowerCase()}`,
-    body: text,
-    link: '#leave',
-  });
-}
+  return sorted.length <= 4 ? sorted.map(fmtDay).join(', ') : `${fmtDay(sorted[0])} to ${fmtDay(sorted[sorted.length - 1])} (${sorted.length} days)`;
+};
 
-export function queueLeaveNotice({ who, label, date }) {
-  if (!leaveBatch || leaveBatch.who !== who || leaveBatch.label !== label) {
-    clearTimeout(leaveBatch?.timer);
-    flushLeave();
-    leaveBatch = { who, label, dates: new Set(), timer: null };
-  }
-  leaveBatch.dates.add(date);
-  clearTimeout(leaveBatch.timer);
-  leaveBatch.timer = setTimeout(flushLeave, WINDOW_MS);
-}
+/** adds: [{ date, code, label }], removes: [{ date, code, label }] (Holiday entries are not leave and are ignored). */
+export function notifyLeaveSubmitted({ who, adds = [], removes = [] }) {
+  const a = adds.filter(x => x.code !== 'HOL');
+  const r = removes.filter(x => x.code !== 'HOL');
+  if (!a.length && !r.length) return Promise.resolve();
 
-/** The person un-clicked a day before the notice went out. */
-export function cancelLeaveNotice(date) {
-  leaveBatch?.dates.delete(date);
+  const byLabel = new Map();
+  a.forEach(x => byLabel.set(x.label, [...(byLabel.get(x.label) || []), x.date]));
+  const parts = [...byLabel.entries()].map(([label, dates]) => `${label}: ${fmtList(dates)}`);
+  if (r.length) parts.push(`Cancelled: ${fmtList(r.map(x => x.date))}`);
+
+  const title = a.length
+    ? `${who} applied for ${[...byLabel.keys()].map(l => l.toLowerCase()).join(' and ')}`
+    : `${who} cancelled leave`;
+  return sendNotification({ roles: ['pm', 'tl'], kind: 'leave', title, body: parts.join(' · '), link: '#leave' });
 }
 
 /* ── Project assignment ── */

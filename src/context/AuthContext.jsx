@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
 import { clearSession } from '../utils/session';
+import { forgetDeviceOnServer } from '../services/push';
 import { initialState } from '../data/initialState';
 
 const AuthContext = createContext();
@@ -85,6 +86,7 @@ export const AuthProvider = ({ children }) => {
   const [portalMode, setPortalMode] = useState('auto'); // 'auto', 'management', 'member'
 
   const logout = () => {
+    forgetDeviceOnServer(localStorage.getItem('alchemist_token'));
     clearSession();
     setUser(null);
     setPortalMode('auto');

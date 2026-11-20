@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { iso, ym, pad, parse, today, hygMembers } from '../../utils/helpers';
 import { useAuth } from '../../context/AuthContext';
 
-import { queueLeaveNotice, cancelLeaveNotice } from '../../services/notifications';
+import { notifyLeaveSubmitted } from '../../services/notifications';
+import LeaveSubmitModal from '../LeaveSubmitModal';
 const LEAVE = [
   ['CL','Casual leave'],['EL','Earned leave'],['CO','Comp off'],
   ['MWB','Mental well-being'],['LOP','Loss of pay'],['BRV','Bereavement'],
@@ -30,34 +32,57 @@ export default function Leave({ data, updateData, ui, setUi }) {
   const nextMonth = () => set({ leaveMonth: ym(new Date(y, m, 1)) });
   const thisMonth = () => set({ leaveMonth: ym(new Date()) });
 
+  // Days tapped here are a draft until the person presses Submit: { 'YYYY-MM-DD': 'CL' | '' }
+  // ('' means "remove the leave already saved on that day").
+  const [draft, setDraft] = useState({});
+  const [reviewing, setReviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const toggleCell = (memberName, memberEmail, dateKey) => {
     if (!canEditLeave(memberName, memberEmail)) {
       alert(`You can only mark your own leave.`);
       return;
     }
-    // Tell the PMs and TLs when someone applies for leave (several clicks become one message)
-    const clearing = (leave[memberName] || {})[dateKey] === brush;
-    if (clearing) {
-      cancelLeaveNotice(dateKey);
-    } else if (brush !== 'HOL') {
-      queueLeaveNotice({ who: user?.name || memberName, label: (LEAVE.find(([c]) => c === brush) || [, 'leave'])[1], date: dateKey });
-    }
-    updateData(prev => {
-      const lv = {...prev.leave};
-      lv[memberName] = {...(lv[memberName]||{})};
-      if (lv[memberName][dateKey] === brush) {
-        delete lv[memberName][dateKey];
-      } else {
-        lv[memberName][dateKey] = brush;
-      }
-      return {...prev, leave: lv};
+    const saved = (leave[memberName] || {})[dateKey] || '';
+    const effective = dateKey in draft ? draft[dateKey] : saved;
+    const target = effective === brush ? '' : brush;
+    setDraft(prev => {
+      const next = { ...prev };
+      if (target === saved) delete next[dateKey]; // back to what is already saved: no change
+      else next[dateKey] = target;
+      return next;
     });
   };
 
-  // Include PM Thasleema and Neha but exclude other PMs
-  const people = members.filter(m =>
-    m.role !== 'PM' || /Thasleema|Neha/.test(m.name)
-  );
+  const labelOf = (code) => (LEAVE.find(([c]) => c === code) || [code, code])[1];
+  const savedOf = (dateKey) => ((leave[myName] || {})[dateKey]) || '';
+  const draftKeys = Object.keys(draft).sort();
+  const adds = draftKeys.filter(k => draft[k]).map(k => ({ date: k, code: draft[k], label: labelOf(draft[k]) }));
+  const removes = draftKeys.filter(k => !draft[k]).map(k => ({ date: k, code: savedOf(k), label: labelOf(savedOf(k)) }));
+
+  const submitAttendance = () => {
+    if (!myName || !draftKeys.length) return;
+    setSaving(true);
+    updateData(prev => {
+      const lv = { ...prev.leave };
+      const row = { ...(lv[myName] || {}) };
+      draftKeys.forEach(k => { if (draft[k]) row[k] = draft[k]; else delete row[k]; });
+      lv[myName] = row;
+      return { ...prev, leave: lv };
+    });
+    notifyLeaveSubmitted({ who: user?.name || myName, adds, removes });
+    setDraft({});
+    setReviewing(false);
+    setSaving(false);
+  };
+
+  // Everyone on the team is listed (PMs and TLs too). If the signed-in user is not on the
+  // team list yet, they still get their own row so they can mark attendance.
+  const mine = members.find(m => isOwnMember(m.name, m.email));
+  const people = (!mine && user)
+    ? [{ name: user.name, email: user.email, role: user.role }, ...members]
+    : members;
+  const myName = mine?.name || user?.name;
 
   const monthLabel = new Date(y, m-1, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
 
@@ -115,7 +140,7 @@ export default function Leave({ data, updateData, ui, setUi }) {
         <div className="leave-brush-title">
           <span>Leave type</span>
           <span style={{ fontWeight: 500, textTransform: 'none', fontSize: '12px' }}>
-            Pick a type, then tap any day in your row to apply or clear
+            Pick a type, tap your days, then press Submit to save
           </span>
         </div>
         <div className="leave-brush-strip" role="radiogroup" aria-label="Leave type to apply">
@@ -199,22 +224,27 @@ export default function Leave({ data, updateData, ui, setUi }) {
                       </div>
                     </td>
                     {cols.map((c, ci) => {
-                      const v = L[c.k] || '';
+                      const own = member.name === myName;
+                      const savedV = L[c.k] || '';
+                      const pend = own && (c.k in draft);
+                      const v = pend ? draft[c.k] : savedV;
+                      const removing = pend && !draft[c.k] && !!savedV;
                       const we = c.w === 0 || c.w === 6;
                       const isTd = c.k === t;
                       const off = we && !v;
                       const prevC = ci > 0 ? cols[ci - 1] : null;
                       const nextC = ci < cols.length - 1 ? cols[ci + 1] : null;
-                      const joined = (o) => o && (v ? L[o.k] : we && (o.w === 0 || o.w === 6) && !L[o.k]);
+                      const eff = (k) => (own && (k in draft) ? draft[k] : L[k]);
+                      const joined = (o) => o && (v ? eff(o.k) : we && (o.w === 0 || o.w === 6) && !eff(o.k));
                       const band = (v || off) ? `${joined(prevC) ? ' band-l' : ''}${joined(nextC) ? ' band-r' : ''} ${v ? 'has-leave' : 'is-off'}` : '';
                       return (
                         <td key={c.k} className={`lc${we ? ' we' : ''}${isTd ? ' td' : ''} ${band}`}>
                           <button
-                            className={`lcell${v ? ' lv-' + v.toLowerCase() : ''}`}
+                            className={`lcell${v ? ' lv-' + v.toLowerCase() : removing ? ' lv-' + savedV.toLowerCase() : ''}${pend && v ? ' pending' : ''}${removing ? ' removing' : ''}`}
                             disabled={off}
                             onClick={() => toggleCell(member.name, member.email, c.k)}
                             style={!canEditRow ? { cursor: 'not-allowed' } : {}}
-                            title={off ? 'Weekly off' : canEditRow ? `${v ? 'Clear' : 'Mark'} leave for ${member.name} on ${c.k}${v ? ' (' + v + ')' : ''}` : `Read-only for ${member.name}`}
+                            title={off ? 'Weekly off' : canEditRow ? `${v ? 'Clear' : 'Mark'} leave on ${c.k}${v ? ' (' + labelOf(v) + ')' : ''}${pend ? ', not submitted yet' : ''}` : `Read-only for ${member.name}`}
                             aria-label={`${member.name} ${c.k}: ${v || (off ? 'weekly off' : 'working')}`}>
                             {c.d}
                           </button>
@@ -228,6 +258,32 @@ export default function Leave({ data, updateData, ui, setUi }) {
           </table>
         </div>
       </section>
+
+      {draftKeys.length > 0 && (
+        <div className="lv-submitbar" role="region" aria-label="Unsubmitted attendance">
+          <div className="lv-sb-text">
+            <b>{draftKeys.length} {draftKeys.length === 1 ? 'change' : 'changes'} not submitted</b>
+            <span>
+              {adds.length > 0 && `${adds.length} ${adds.length === 1 ? 'day' : 'days'} to add`}
+              {adds.length > 0 && removes.length > 0 && ' · '}
+              {removes.length > 0 && `${removes.length} to remove`}
+            </span>
+          </div>
+          <button type="button" className="btn ghost" onClick={() => setDraft({})}>Discard</button>
+          <button type="button" className="btn" onClick={() => setReviewing(true)}>Submit attendance</button>
+        </div>
+      )}
+
+      {reviewing && (
+        <LeaveSubmitModal
+          adds={adds}
+          removes={removes}
+          who={(user?.name || '').split(' ')[0]}
+          saving={saving}
+          onCancel={() => setReviewing(false)}
+          onConfirm={submitAttendance}
+        />
+      )}
 
     </div>
   );
