@@ -13,6 +13,7 @@ import './utils/theme';
 import './styles.css';
 import './styles/polish.css';
 
+import SplashScreen from './components/common/SplashScreen';
 function AuthenticatedApp() {
   const [data, setData] = useState(() => {
     try {
@@ -63,6 +64,16 @@ function AuthenticatedApp() {
     document.body.classList.toggle('navopen', !!navOpen);
     return () => document.body.classList.remove('navopen');
   }, [navOpen]);
+
+  // Keep other open tabs in sync: when another tab saves, adopt its data.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== 'alchemist-data' || !e.newValue) return;
+      try { setData(JSON.parse(e.newValue)); } catch { /* ignore bad payload */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     try {
@@ -170,34 +181,7 @@ function AppContent() {
 
   // Check if user should see loading screen
   if (loading) {
-    return (
-      <div style={{ 
-        height: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        background: '#F9FAFB'
-      }}>
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', width: '220px' }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '16px',
-            background: 'linear-gradient(135deg, #FFF9F5 0%, #FFEDD5 100%)',
-            border: '1px solid #FED7AA',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '28px',
-            boxShadow: '0 4px 14px rgba(249, 115, 22, 0.15)'
-          }}>
-            🧪
-          </div>
-          <div className="skeleton-shimmer" style={{ width: '140px', height: '14px', borderRadius: '999px' }} />
-          <div className="skeleton-shimmer" style={{ width: '90px', height: '10px', borderRadius: '999px', opacity: 0.7 }} />
-        </div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   // Public pages render on their own: no Alchemist sidebar/top bar, no login.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import {
   X, Upload, Link2, KeyRound, Eye, EyeOff, ShieldCheck, FileText, Trash2, Send, Check, Plus,
   ExternalLink, ChevronDown, ChevronUp, Copy, Loader2, AlertTriangle, CheckCircle2, ClipboardPaste, Lock,
@@ -7,6 +7,7 @@ import {
 import { API_URL } from '../apiConfig';
 import { fetchDynamicCredentialGuidance, looksLikeCredential } from '../utils/credentialGuide';
 
+import { dialog } from '../utils/dialog';
 // Client-facing evidence + secure credential handover dialog.
 // Everything shown comes from the item itself; nothing is pre-filled with sample data.
 // A client can share any number of credentials in one submission.
@@ -91,7 +92,12 @@ export const SubmitEvidenceModal = ({ isOpen = true, item, onClose, onUpdated, o
   const addFiles = (list) => setFiles((prev) => [...prev, ...Array.from(list || [])]);
   const existingFiles = (item.evidence_file || '').split(',').map((f) => f.trim()).filter(Boolean);
   const updateCred = (id, patch) => setCreds((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const removeCred = (id) => setCreds((rows) => rows.filter((r) => r.id !== id));
+  const removeCred = async (id) => {
+    const row = creds.find((r) => r.id === id);
+    const hasData = row && Object.entries(row).some(([k, v]) => k !== 'id' && typeof v === 'string' && v.trim());
+    if (hasData && !(await dialog.confirm('The details you entered for this credential will be discarded.', { title: 'Remove this credential?', variant: 'danger', confirmLabel: 'Remove' }))) return;
+    setCreds((rows) => rows.filter((r) => r.id !== id));
+  };
 
   const importBulk = () => {
     const rows = parseBulk(bulkText);

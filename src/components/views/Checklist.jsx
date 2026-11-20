@@ -1,6 +1,7 @@
 import React, { useState, useMemo, Fragment } from 'react';
 import { Mail, ChevronDown, ChevronRight, CheckCircle2, Clock, AlertTriangle, ShieldCheck, ListChecks, Calendar, Rocket, Activity, CheckSquare } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { norm } from '../../utils/helpers';
 
 // Simple GitHub icon component
 const GitHubIcon = ({ size = 16, color = "#000" }) => (
@@ -38,8 +39,8 @@ export default function Checklist({ data, updateData, ui, setUi }) {
     if (!user || isManagementUser) return clProjects; // PM/TL see all
     const myMember = (members || []).find(m => isOwnMember(m.name, m.email));
     if (!myMember) return [];
-    const myProjects = (myMember.projects || []).map(p => p.replace(/\s+/g, '').toLowerCase());
-    return clProjects.filter(n => myProjects.includes(n.replace(/\s+/g, '').toLowerCase()));
+    const myProjects = (myMember.projects || []).map(norm);
+    return clProjects.filter(n => myProjects.includes(norm(n)));
   }, [user, isManagementUser, members, clProjects, isOwnMember]);
 
   // Default active project
@@ -119,18 +120,18 @@ export default function Checklist({ data, updateData, ui, setUi }) {
           <div className="scroll">
             <table className="tbl mx" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 0 }}>
               <thead>
-                <tr style={{ background: '#FAFAFA' }}>
-                  <th className="sticky" style={{ background: '#FAFAFA', fontWeight: 700, letterSpacing: '0.04em', padding: '14px 20px', zIndex: 3 }}>
+                <tr style={{ background: 'var(--soft)' }}>
+                  <th className="sticky" style={{ background: 'var(--soft)', fontWeight: 700, letterSpacing: '0.04em', padding: '14px 20px', zIndex: 3 }}>
                     CHECKLIST ITEM
                   </th>
                   {names.map(n => (
-                    <th key={n} className="vert" style={{ background: '#FAFAFA', verticalAlign: 'bottom', textAlign: 'center' }}>
+                    <th key={n} className="vert" style={{ background: 'var(--soft)', verticalAlign: 'bottom', textAlign: 'center' }}>
                       <button onClick={() => set({ clProject: n, clView: 'project' })} title={`Open ${n}`}>
                         {n}
                       </button>
                     </th>
                   ))}
-                  <th className="r" style={{ background: '#FAFAFA', fontWeight: 700, letterSpacing: '0.04em', padding: '14px 20px' }}>
+                  <th className="r" style={{ background: 'var(--soft)', fontWeight: 700, letterSpacing: '0.04em', padding: '14px 20px' }}>
                     DONE
                   </th>
                 </tr>
@@ -161,7 +162,7 @@ export default function Checklist({ data, updateData, ui, setUi }) {
                           userSelect: 'none',
                           borderTop: idx > 0 ? '1px solid var(--line)' : 'none',
                           borderBottom: isCollapsed ? '1px solid var(--line)' : '1px solid var(--line)',
-                          background: isCollapsed ? 'var(--surface)' : 'linear-gradient(180deg, #FFF9F5 0%, var(--surface) 100%)',
+                          background: isCollapsed ? 'var(--surface)' : 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)) 0%, var(--surface) 100%)',
                           transition: 'background 0.15s ease',
                         }}
                         onClick={() => togglePhase(phaseKey)}
@@ -385,19 +386,19 @@ export default function Checklist({ data, updateData, ui, setUi }) {
           </span>
         </div>
         <div className="fgrid four">
-          <label><span>Client</span><input value={meta.client||''} onChange={e=>setMeta(active,'client',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}} /></label>
+          <label><span>Client</span><input value={meta.client||''} onChange={e=>setMeta(active,'client',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}} /></label>
           <label><span>ML combo</span>
-            <select value={meta.combo||''} onChange={e=>setMeta(active,'combo',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}}>
+            <select value={meta.combo||''} onChange={e=>setMeta(active,'combo',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}}>
               <option value="">—</option>
               {Object.keys(COMBO).map(c => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label><span>Kick-off date</span><input type="date" value={meta.kickoff||''} onChange={e=>setMeta(active,'kickoff',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}} /></label>
-          <label><span>UAT date</span><input type="date" value={meta.uat||''} onChange={e=>setMeta(active,'uat',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}} /></label>
+          <label><span>Kick-off date</span><input type="date" value={meta.kickoff||''} onChange={e=>setMeta(active,'kickoff',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}} /></label>
+          <label><span>UAT date</span><input type="date" value={meta.uat||''} onChange={e=>setMeta(active,'uat',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}} /></label>
         </div>
         <div className="fgrid four" style={{ marginTop: '12px' }}>
-          <label><span>Contact Email</span><input type="email" placeholder="email@example.com" value={meta.email||''} onChange={e=>setMeta(active,'email',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}} /></label>
-          <label><span>GitHub Repo/User</span><input placeholder="username or repo url" value={meta.github||''} onChange={e=>setMeta(active,'github',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'#F9FAFB',cursor:'default'}:{}} /></label>
+          <label><span>Contact Email</span><input type="email" placeholder="email@example.com" value={meta.email||''} onChange={e=>setMeta(active,'email',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}} /></label>
+          <label><span>GitHub Repo/User</span><input placeholder="username or repo url" value={meta.github||''} onChange={e=>setMeta(active,'github',e.target.value)} disabled={!canEdit} style={!canEdit?{background:'var(--soft)',cursor:'default'}:{}} /></label>
         </div>
         <div className="phases">
           {PHASES.map((ph,i) => (
@@ -452,7 +453,7 @@ export default function Checklist({ data, updateData, ui, setUi }) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '16px 20px',
-                background: isCollapsed ? 'var(--surface)' : 'linear-gradient(180deg, #FFF9F5 0%, var(--surface) 100%)',
+                background: isCollapsed ? 'var(--surface)' : 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)) 0%, var(--surface) 100%)',
                 borderBottom: isCollapsed ? 'none' : '1px solid var(--line)',
                 transition: 'background 0.2s ease',
               }}
@@ -542,17 +543,19 @@ export default function Checklist({ data, updateData, ui, setUi }) {
                           <div className="small muted">Owner {it.owner} · verified by {it.verifier}</div>
                         </div>
                       </div>
-                      <div className="sset" role="radiogroup" aria-label={`Status for item ${it.n}`}>
-                        {CSTAT.map(c => (
-                          <button key={c || 'blank'} role="radio" aria-checked={c === v}
-                            disabled={!canEdit}
-                            style={!canEdit ? { cursor: 'default', opacity: c === v ? 1 : 0.4 } : {}}
-                            className={`sb c-${slug(c || 'none')}${c === v ? ' on' : ''}`}
-                            onClick={() => setItem(active, it.n, c)}>
-                            {c || 'Not started'}
-                          </button>
-                        ))}
-                      </div>
+                      {canEdit ? (
+                        <div className="sset" role="radiogroup" aria-label={`Status for item ${it.n}`}>
+                          {CSTAT.map(c => (
+                            <button key={c || 'blank'} type="button" role="radio" aria-checked={c === v}
+                              className={`sb c-${slug(c || 'none')}${c === v ? ' on' : ''}`}
+                              onClick={() => setItem(active, it.n, c)}>
+                              {c || 'Not started'}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className={`spill c-${slug(v || 'none')}`}>{v || 'Not started'}</span>
+                      )}
                     </li>
                   );
                 })}

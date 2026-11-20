@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
+import { clearSession } from '../utils/session';
 import { initialState } from '../data/initialState';
 
 const AuthContext = createContext();
@@ -11,19 +12,34 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in
+    // Trust the server, not localStorage: validate the token and use the role it returns.
     const token = localStorage.getItem('alchemist_token');
-    const storedUser = localStorage.getItem('alchemist_user');
-    
-    if (token && storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-        logout();
-      }
+    if (!token || !API_BASE_URL) {
+      if (token) clearSession();
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          const me = await res.json();
+          localStorage.setItem('alchemist_user', JSON.stringify(me));
+          setUser(me);
+        } else if (res.status === 401 || res.status === 403) {
+          clearSession();
+        } else {
+          // Server error: fall back to cached profile but keep the token for retry
+          try { setUser(JSON.parse(localStorage.getItem('alchemist_user'))); } catch { clearSession(); }
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        try { setUser(JSON.parse(localStorage.getItem('alchemist_user'))); } catch { clearSession(); }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const login = async (email, password) => {
@@ -69,8 +85,7 @@ export const AuthProvider = ({ children }) => {
   const [portalMode, setPortalMode] = useState('auto'); // 'auto', 'management', 'member'
 
   const logout = () => {
-    localStorage.removeItem('alchemist_token');
-    localStorage.removeItem('alchemist_user');
+    clearSession();
     setUser(null);
     setPortalMode('auto');
   };
@@ -105,28 +120,8 @@ export const AuthProvider = ({ children }) => {
       return true;
     }
 
-    // 2. Look up member in initialState to cross-check email
-    if (targetName && uEmail && initialState?.members) {
-      const found = initialState.members.find(
-        m => (m.name || '').trim().toLowerCase() === targetName.trim().toLowerCase()
-      );
-      if (found && found.email && found.email.trim().toLowerCase() === uEmail) {
-        return true;
-      }
-    }
-
-    // 3. Name check
-    if (!targetName) return false;
-    const uName = (user.name || '').trim().toLowerCase();
-    const mName = targetName.trim().toLowerCase();
-    if (uName === mName) return true;
-
-    const uParts = uName.split(/\s+/);
-    const mParts = mName.split(/\s+/);
-    if (uParts.length > 1 && mParts.length > 1) {
-      if (uParts[0] === mParts[0] && uParts[1] === mParts[1]) return true;
-    }
-    return uName.includes(mName) || mName.includes(uName);
+    // Identity is matched on email only; names are not unique or trustworthy.
+    return false;
   };
 
   // Permission helpers - only PM & TL can edit project, checklist, improvements, links

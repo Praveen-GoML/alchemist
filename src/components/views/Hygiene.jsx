@@ -52,10 +52,10 @@ export default function Hygiene({ data, updateData, ui, setUi }) {
     if (h.t != null) { colT[0] += h.t; colT[1]++; }
 
     return (
-      <tr key={m.name} style={isMe ? { background: '#F0FDF4' } : {}}>
+      <tr key={m.name} data-me={isMe ? 'true' : undefined}>
         <td>
           <b>{m.name}</b>
-          {isMe && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>You</span>}
+          {isMe && <span className="me-badge">You</span>}
           <div className="small muted">{m.role}{m.combo ? ` · ${m.combo}` : ''}</div>
         </td>
         {D.map((_, i) => {

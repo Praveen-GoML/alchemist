@@ -1,13 +1,17 @@
-﻿import React, { useState } from 'react';
-import axios from 'axios';
+﻿import React, { useState, useEffect } from 'react';
+import axios from '../api/client';
 import { X, Loader2 } from 'lucide-react';
 import { API_URL } from '../apiConfig';
 
 export const EscalateModal = ({ isOpen, onClose, item, onEscalated }) => {
   const [level, setLevel] = useState(2);
-  const [message, setMessage] = useState(
-    `Prerequisite '${item?.name}' assigned to ${item?.owner} is currently pending or blocked. Target kick-off schedule is at risk unless evidence is submitted immediately.`
-  );
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    if (!item) return;
+    setLevel(2);
+    setError('');
+    setMessage(`Prerequisite '${item.name}' assigned to ${item.owner} is currently pending or blocked. Target kick-off schedule is at risk unless evidence is submitted immediately.`);
+  }, [item?.id]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -49,7 +53,7 @@ export const EscalateModal = ({ isOpen, onClose, item, onEscalated }) => {
           <button 
             onClick={onClose} 
             style={{ 
-              background: '#FFFFFF', 
+              background: 'var(--surface)', 
               border: '1.5px solid #E6E1DB', 
               borderRadius: '50%', 
               width: '32px', 
@@ -154,7 +158,7 @@ export const EscalateModal = ({ isOpen, onClose, item, onEscalated }) => {
               type="button" 
               onClick={onClose} 
               style={{
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#1F1B17',
                 border: '2px solid #E6E1DB',
                 borderRadius: '9999px',

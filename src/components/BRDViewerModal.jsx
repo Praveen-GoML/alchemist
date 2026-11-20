@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo, Fragment } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import {
   FileText, Download, X, Layers, RefreshCw, AlertTriangle,
   FileSpreadsheet, ChevronDown, Sparkles
@@ -263,7 +263,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
             display: 'inline-flex',
             alignItems: 'center',
             height: '42px',
-            background: '#FAF8F5',
+            background: 'var(--bg)',
             border: '1px solid #E6E1DB',
             borderRadius: '12px',
             padding: '0 18px',
@@ -286,7 +286,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
         {/* Center: Large Material 3 Segmented Pill Switcher */}
         <div style={{
           display: 'inline-flex',
-          background: '#F5F1EC',
+          background: 'var(--soft)',
           padding: '4px',
           borderRadius: '12px',
           border: '1px solid #E6E1DB',
@@ -347,7 +347,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                 onClick={handleDownloadDocx}
                 disabled={downloadingDocx}
                 style={{
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   border: '2px solid #E6E1DB',
                   borderRadius: '12px',
@@ -381,7 +381,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                 onClick={handleDownloadExcel}
                 disabled={downloadingExcel}
                 style={{
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   border: '2px solid #E6E1DB',
                   borderRadius: '12px',
@@ -419,7 +419,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
               width: '42px',
               height: '42px',
               borderRadius: '12px',
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '1px solid #E6E1DB',
               color: '#6E6862',
               cursor: regenerating ? 'not-allowed' : 'pointer',
@@ -520,6 +520,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
           <iframe
             key={`brd-viewer-${projectId}`}
             src={iframeSrc}
+            sandbox=""
             title={`${projectName} — BRD Document`}
             style={{
               width: '100%',
@@ -535,14 +536,14 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             overflow: 'hidden',
             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif"
-          }}>
+          }} className="xl-sheet">
             {/* 1. EXCEL FORMULA BAR */}
             <div style={{
               height: '32px',
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               borderBottom: '1px solid #D4D4D4',
               display: 'flex',
               alignItems: 'center',
@@ -554,7 +555,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
               <div style={{
                 width: '64px',
                 height: '24px',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 border: '1px solid #D4D4D4',
                 borderRadius: '2px',
                 display: 'flex',
@@ -599,7 +600,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
             <div style={{
               flex: 1,
               overflow: 'auto',
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               position: 'relative'
             }}>
               <table style={{
@@ -608,7 +609,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                 fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
                 fontSize: '12px',
                 color: '#000000',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 minWidth: '100%'
               }}>
                 {/* Column Headers (A, B, C, D, E, F...) */}
@@ -654,7 +655,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                             width: `${col.width}px`,
                             minWidth: `${col.width}px`,
                             height: '24px',
-                            background: isColSelected ? '#E1DFDD' : '#F3F3F3',
+                            background: isColSelected ? '#D3E7DA' : '#F3F3F3',
                             border: '1px solid #D4D4D4',
                             borderBottom: isColSelected ? '2px solid #107C41' : '1px solid #D4D4D4',
                             color: isColSelected ? '#107C41' : '#323130',
@@ -681,7 +682,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                       minWidth: '44px',
                       height: '28px',
                       textAlign: 'center',
-                      background: selectedCell.row === 1 ? '#E1DFDD' : '#F3F3F3',
+                      background: selectedCell.row === 1 ? '#D3E7DA' : '#F3F3F3',
                       border: '1px solid #D4D4D4',
                       borderRight: selectedCell.row === 1 ? '2px solid #107C41' : '1px solid #D4D4D4',
                       color: selectedCell.row === 1 ? '#107C41' : '#323130',
@@ -739,7 +740,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                           key={coord}
                           onClick={() => setSelectedCell({ coord, col: c, row: 1, value: '' })}
                           style={{
-                            background: '#FFFFFF',
+                            background: 'var(--surface)',
                             border: '1px solid #E0E0E0',
                             cursor: 'cell',
                             outline: isSel ? '2px solid #107C41' : 'none',
@@ -772,7 +773,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                           minWidth: '44px',
                           height: '32px',
                           textAlign: 'center',
-                          background: isRowSel ? '#E1DFDD' : '#F3F3F3',
+                          background: isRowSel ? '#D3E7DA' : '#F3F3F3',
                           border: '1px solid #D4D4D4',
                           borderRight: isRowSel ? '2px solid #107C41' : '1px solid #D4D4D4',
                           color: isRowSel ? '#107C41' : '#323130',
@@ -791,11 +792,11 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                             rowSpan={r.catSpan}
                             onClick={() => setSelectedCell({ coord: `A${r.rowNum}`, col: 'A', row: r.rowNum, value: r.category })}
                             style={{
-                              background: '#FBE5D6',
+                              background: '#FDF3EA',
                               color: '#000000',
-                              border: '1px solid #000000',
+                              border: '1px solid #D4D4D4',
                               fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
-                              fontSize: '10pt',
+                              fontSize: '11pt',
                               fontWeight: 700,
                               textAlign: 'center',
                               verticalAlign: 'middle',
@@ -818,11 +819,11 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                         <td
                           onClick={() => setSelectedCell({ coord: `B${r.rowNum}`, col: 'B', row: r.rowNum, value: r.title })}
                           style={{
-                            background: '#FBE5D6',
+                            background: '#FFFFFF',
                             color: '#000000',
-                            border: '1px solid #000000',
+                            border: '1px solid #E1E1E1',
                             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
-                            fontSize: '10pt',
+                            fontSize: '11pt',
                             fontWeight: 700,
                             textAlign: 'left',
                             verticalAlign: 'middle',
@@ -844,11 +845,11 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                         <td
                           onClick={() => setSelectedCell({ coord: `C${r.rowNum}`, col: 'C', row: r.rowNum, value: r.description })}
                           style={{
-                            background: '#FBE5D6',
+                            background: '#FFFFFF',
                             color: '#000000',
-                            border: '1px solid #000000',
+                            border: '1px solid #E1E1E1',
                             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
-                            fontSize: '10pt',
+                            fontSize: '11pt',
                             fontWeight: 400,
                             lineHeight: 1.42,
                             textAlign: 'left',
@@ -871,11 +872,11 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                         <td
                           onClick={() => setSelectedCell({ coord: `D${r.rowNum}`, col: 'D', row: r.rowNum, value: r.timeline })}
                           style={{
-                            background: '#FBE5D6',
+                            background: '#FFFFFF',
                             color: '#000000',
-                            border: '1px solid #000000',
+                            border: '1px solid #E1E1E1',
                             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
-                            fontSize: '10pt',
+                            fontSize: '11pt',
                             fontWeight: 400,
                             textAlign: 'left',
                             verticalAlign: 'middle',
@@ -903,7 +904,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                               key={coord}
                               onClick={() => setSelectedCell({ coord, col: c, row: r.rowNum, value: '' })}
                               style={{
-                                background: '#FFFFFF',
+                                background: 'var(--surface)',
                                 border: '1px solid #E0E0E0',
                                 cursor: 'cell',
                                 outline: isSel ? '2px solid #107C41' : 'none',
@@ -933,7 +934,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                           minWidth: '44px',
                           height: '24px',
                           textAlign: 'center',
-                          background: isRowSel ? '#E1DFDD' : '#F3F3F3',
+                          background: isRowSel ? '#D3E7DA' : '#F3F3F3',
                           border: '1px solid #D4D4D4',
                           borderRight: isRowSel ? '2px solid #107C41' : '1px solid #D4D4D4',
                           color: isRowSel ? '#107C41' : '#323130',
@@ -955,7 +956,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                               key={coord}
                               onClick={() => setSelectedCell({ coord, col: c, row: rowNum, value: '' })}
                               style={{
-                                background: '#FFFFFF',
+                                background: 'var(--surface)',
                                 border: '1px solid #E0E0E0',
                                 height: '24px',
                                 cursor: 'cell',
@@ -995,7 +996,7 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
                 <div style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   borderTop: '2px solid #ED7D31',
                   borderLeft: '1px solid #D4D4D4',
                   borderRight: '1px solid #D4D4D4',

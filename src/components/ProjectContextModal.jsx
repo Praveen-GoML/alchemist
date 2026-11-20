@@ -245,11 +245,11 @@ export const ProjectContextModal = ({ projectId, projectName, onClose }) => {
               </span>
             </div>
             {CONTEXT_SECTIONS.map((s) => (
-              <label key={s.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 6px', cursor: 'pointer', borderRadius: 8 }}>
-                <input type="checkbox" checked={!!include[s.key]} onChange={() => toggle(s.key)} style={{ marginTop: 3, accentColor: '#F28C28' }} />
-                <span>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{s.label}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: 'var(--muted, #6E6862)' }}>{s.hint}</span>
+              <label key={s.key} className="ctx-opt" data-on={include[s.key] ? 'true' : 'false'}>
+                <input type="checkbox" checked={!!include[s.key]} onChange={() => toggle(s.key)} />
+                <span className="ctx-opt-text">
+                  <span className="ctx-opt-title">{s.label}</span>
+                  <span className="ctx-opt-hint">{s.hint}</span>
                 </span>
               </label>
             ))}

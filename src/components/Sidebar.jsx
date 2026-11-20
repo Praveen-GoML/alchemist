@@ -11,8 +11,7 @@ const NAV_GROUPS = [
                  ['hygiene',      'Daily hygiene',  'hygiene'   ],
                  ['leave',        'Leave tracker',  'leave'     ]]],
   ['Hub',       [['improvements', 'Improvements',  'improvements'],
-                 ['links',        'Tracker links',  'links'     ],
-                 ['playbook',     'Playbook',       'playbook'  ]]],
+                 ['links',        'Tracker links',  'links'     ]]],
 ];
 
 // Items hidden from regular members (non-PM/TL/Admin)

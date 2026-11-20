@@ -2,7 +2,7 @@ export const PHASES = ['Pre-project','Readiness','Kick-off & planning','Executio
 export const PSTAT  = ['On Schedule','Behind','Delayed','Not Started','Completed'];
 export const CSTAT  = ['','In progress','Done','Blocked','N/A'];
 export const ISTAT  = ['Not started','In progress','Done','Blocked'];
-export const LEAVE  = [['CL','Casual leave'],['SL','Sick leave'],['EL','Earned leave'],['CO','Comp off'],['FL','Floater'],['MWB','Mental well-being'],['LOP','Loss of pay'],['BRV','Bereavement'],['MAR','Marriage'],['SAB','Sabbatical'],['HOL','Holiday']];
+export const LEAVE  = [['CL','Casual leave'],['EL','Earned leave'],['CO','Comp off'],['MWB','Mental well-being'],['LOP','Loss of pay'],['BRV','Bereavement'],['MAR','Marriage'],['SAB','Sabbatical'],['HOL','Holiday']];
 export const COMBO  = {Gold:'Au',Silver:'Ag',Mercury:'Hg',Copper:'Cu'};
 
 export function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -148,4 +148,11 @@ export function exportJSON(data, filename) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+
+/** Owner text for display: drops the "(role to confirm)" placeholder the AI sometimes adds. */
+export function cleanOwner(owner) {
+  const t = String(owner ?? '').replace(/\s*\(\s*role to confirm\s*\)/i, '').trim();
+  return t || 'Needs assignment';
 }

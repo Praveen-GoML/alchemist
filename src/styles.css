@@ -4660,4 +4660,15 @@ tr.is-me td {
 @keyframes dia-scalein {
     from { opacity: 0; transform: scale(0.96); }
     to   { opacity: 1; transform: scale(1); }
-}
+}
+/* Team popover opens below its badge: caret on top edge */
+.ava-pop[style*="top:"]::after {
+    bottom: auto;
+    top: -5px;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+}
+
+.person-remove { cursor: pointer; background: var(--surface); }
+.person-remove:hover { color: #D9482F; border-color: #F3B8AE; background: #FDECE8; }

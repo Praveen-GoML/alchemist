@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { 
   CheckCircle, Clock, AlertTriangle, Upload, Plus, 
   ExternalLink, Lock, Sparkles, Award, Search, 
@@ -8,6 +8,7 @@ import {
   ArrowUpRight, LayoutGrid
 } from 'lucide-react';
 import { API_URL, BASE_URL } from '../apiConfig';
+import { cleanOwner } from '../utils/helpers';
 import { SubmitEvidenceModal } from '../components/SubmitEvidenceModal';
 import { ViewProofModal } from '../components/ViewProofModal';
 import { AddItemModal } from '../components/AddItemModal';
@@ -20,6 +21,7 @@ import { AIBundleModal } from '../components/AIBundleModal';
 import { ProjectContextModal } from '../components/ProjectContextModal';
 import { CredentialsTrackerModal } from '../components/CredentialsTrackerModal';
 
+import { dialog } from '../utils/dialog';
 const asArr = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 function PrereqDetails({ item }) {
   const Block = ({ title, children }) => (
@@ -48,6 +50,14 @@ function PrereqDetails({ item }) {
       {item.source_reference && <Block title="Source">{item.source_reference}</Block>}
     </>
   );
+}
+
+// Remember the order items first appeared in, so changing a status never makes a row jump.
+const _order = {};
+function stableOrder(projectId, items) {
+  const map = (_order[projectId] = _order[projectId] || new Map());
+  items.forEach((it) => { if (it && !map.has(it.id)) map.set(it.id, map.size); });
+  return [...items].sort((a, b) => (map.get(a?.id) ?? 1e9) - (map.get(b?.id) ?? 1e9));
 }
 
 export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
@@ -168,7 +178,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
   };
 
   const handleInternalSignoff = async () => {
-    if (!window.confirm("Confirm Akshay (Team Lead) & Thasleema (Project Manager) internal governance sign-off? This validates that the Pre-Req Tracker has been strictly reviewed without unnecessary filler, and is now cleared for external engagement.")) {
+    if (!(await dialog.confirm('This confirms the Pre-Req Tracker has been reviewed and is cleared for client handover.', { title: 'Confirm internal sign-off?', variant: 'question', confirmLabel: 'Sign off' }))) {
       return;
     }
     setInternalSignoffLoading(true);
@@ -249,9 +259,9 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
 
   if (loading || (!project && !fetchError)) {
     return (
-      <div style={{ background: '#FAF8F5', minHeight: '100vh', paddingBottom: '4rem' }}>
+      <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: '4rem' }}>
         {/* Workspace Header Skeleton */}
-        <section style={{ background: '#ffffff', paddingTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #E6E1DB' }}>
+        <section style={{ background: 'var(--surface)', paddingTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #E6E1DB' }}>
           <div className="goml-container">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
               <div className="goml-skeleton" style={{ width: '160px', height: '18px', borderRadius: '6px' }} />
@@ -284,7 +294,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
           <div className="goml-container">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               {[1, 2, 3, 4].map(idx => (
-                <div key={idx} style={{ background: '#FFFFFF', border: '1px solid #E6E1DB', borderRadius: '14px', padding: '1.35rem 1.5rem' }}>
+                <div key={idx} style={{ background: 'var(--surface)', border: '1px solid #E6E1DB', borderRadius: '14px', padding: '1.35rem 1.5rem' }}>
                   <div className="goml-skeleton" style={{ width: '100px', height: '14px', borderRadius: '4px', marginBottom: '12px' }} />
                   <div className="goml-skeleton" style={{ width: '80px', height: '36px', borderRadius: '6px', marginBottom: '8px' }} />
                   <div className="goml-skeleton" style={{ width: '140px', height: '12px', borderRadius: '4px' }} />
@@ -293,7 +303,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
             </div>
 
             {/* Verification Table & Filter Skeleton */}
-            <div style={{ background: '#FFFFFF', border: '1px solid #E6E1DB', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid #E6E1DB', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div className="goml-skeleton" style={{ width: '220px', height: '24px', borderRadius: '6px' }} />
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -306,7 +316,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
               {/* Table Rows Skeleton */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[1, 2, 3, 4, 5].map(rowIdx => (
-                  <div key={rowIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#FAF8F5', borderRadius: '10px', border: '1px solid #F5F1EC' }}>
+                  <div key={rowIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'var(--bg)', borderRadius: '10px', border: '1px solid #F5F1EC' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div className="goml-skeleton" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
                       <div>
@@ -336,7 +346,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
         </div>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1F1B17', margin: 0 }}>Initiative Workspace Sync Pending</h2>
         <p style={{ color: '#6E6862', fontSize: '13.5px', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          The requested project workspace (<code style={{ background: '#F5F1EC', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>{id?.slice(0, 12)}...</code>) is finalizing setup or experienced a brief sync delay.
+          The requested project workspace (<code style={{ background: 'var(--soft)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>{id?.slice(0, 12)}...</code>) is finalizing setup or experienced a brief sync delay.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.75rem', flexWrap: 'wrap' }}>
           <button 
@@ -388,7 +398,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
 
   const categories = Array.from(new Set(safeChecklist.map(i => i?.category || 'General')));
 
-  const filteredItems = safeChecklist.filter(item => {
+  const filteredItems = stableOrder(projectId, safeChecklist).filter(item => {
     if (!item) return false;
     const nameStr = (item.name || '').toLowerCase();
     const descStr = (item.description || '').toLowerCase();
@@ -454,7 +464,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
     }
     return (
       <span style={{
-        background: '#FAF8F5',
+        background: 'var(--bg)',
         color: '#1F1B17',
         border: '1.5px solid #E6E1DB',
         padding: '4px 14px',
@@ -474,9 +484,9 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
   const pendingCount = safeChecklist.filter(i => i?.status !== 'Verified').length;
 
   return (
-    <div style={{ background: '#FAF8F5', minHeight: '100vh', paddingBottom: '5rem' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: '5rem' }}>
       {/* Top Workspace Header Bar */}
-      <section style={{ background: '#FFFFFF', paddingTop: '1.25rem', paddingBottom: '1.25rem', borderBottom: '1px solid rgba(226, 232, 240, 0.8)' }}>
+      <section style={{ background: 'var(--surface)', paddingTop: '1.25rem', paddingBottom: '1.25rem', borderBottom: '1px solid rgba(226, 232, 240, 0.8)' }}>
         <div className="goml-container">
           {/* Breadcrumb & Client Link */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -549,7 +559,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                   <>
                     <span style={{ color: '#D8D0C7' }}>•</span>
                     <span style={{
-                      background: '#FAF8F5',
+                      background: 'var(--bg)',
                       color: '#1F1B17',
                       border: '1.5px solid #E6E1DB',
                       padding: '3px 12px',
@@ -606,7 +616,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
             marginTop: '1.25rem',
             padding: '14px 24px',
             borderRadius: '20px',
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             border: '2px solid #E6E1DB',
             borderLeft: '5px solid #ED7D31',
             display: 'flex',
@@ -750,7 +760,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => { setSelectedStatus('Critical'); setOnlyCritical(true); }}
+                  onClick={() => { setSelectedStatus('ALL'); setOnlyCritical(true); }}
                   style={{
                     background: onlyCritical ? '#ED7D31' : '#FFFFFF',
                     color: onlyCritical ? '#FFFFFF' : '#1F1B17',
@@ -791,7 +801,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
 
             {/* Seamless 4-Metric Executive Strip with Divider Rules (Material 3 Surface - Orange, Black & White Only) */}
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '2px solid #E6E1DB',
               borderRadius: '24px',
               padding: '1.6rem 2.25rem',
@@ -813,7 +823,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                     fontSize: '11.5px',
                     fontWeight: 800,
                     color: '#1F1B17',
-                    background: '#F5F1EC',
+                    background: 'var(--soft)',
                     border: '1px solid #E6E1DB',
                     padding: '2px 10px',
                     borderRadius: '9999px'
@@ -821,7 +831,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                     {verifiedCount} of {project.total_items} Cleared
                   </span>
                 </div>
-                <div style={{ width: '100%', height: '6px', background: '#F5F1EC', borderRadius: '9999px', overflow: 'hidden', marginTop: '10px' }}>
+                <div style={{ width: '100%', height: '6px', background: 'var(--soft)', borderRadius: '9999px', overflow: 'hidden', marginTop: '10px' }}>
                   <div style={{
                     width: `${project.score}%`,
                     height: '100%',
@@ -871,7 +881,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                     fontSize: '11.5px',
                     fontWeight: 800,
                     color: '#1F1B17',
-                    background: '#F5F1EC',
+                    background: 'var(--soft)',
                     border: '1px solid #E6E1DB',
                     padding: '2px 10px',
                     borderRadius: '9999px'
@@ -1011,7 +1021,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
               <div style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                background: '#FAF8F5',
+                background: 'var(--bg)',
                 border: '2px solid #E6E1DB',
                 padding: '6px',
                 borderRadius: '9999px',
@@ -1086,7 +1096,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                   <div style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    background: '#FAF8F5',
+                    background: 'var(--bg)',
                     border: '2px solid #E6E1DB',
                     padding: '6px',
                     borderRadius: '9999px',
@@ -1212,7 +1222,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                         fontSize: '13.5px',
                         outline: 'none',
                         width: '100%',
-                        background: '#FFFFFF',
+                        background: 'var(--surface)',
                         color: '#1F1B17',
                         boxShadow: '0 1px 3px rgba(31, 27, 23, 0.03)',
                         fontFamily: 'inherit',
@@ -1252,7 +1262,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                       <div
                         key={item.id}
                         style={{
-                          background: '#FFFFFF',
+                          background: 'var(--surface)',
                           borderRadius: dashboardView === 'MATRIX' ? '20px' : '0',
                           border: dashboardView === 'MATRIX' ? '2px solid #E6E1DB' : 'none',
                           borderBottom: dashboardView === 'MATRIX' ? '2px solid #E6E1DB' : isLast ? 'none' : '1px solid #F5F1EC',
@@ -1330,8 +1340,8 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                             <div style={{
                               fontSize: '15px',
                               fontWeight: 800,
-                              color: isVerified ? '#6E6862' : '#1F1B17',
-                              textDecoration: isVerified ? 'line-through' : 'none',
+                              color: '#1F1B17',
+                              textDecoration: 'none',
                               lineHeight: 1.35,
                               marginBottom: '4px',
                               letterSpacing: '-0.01em'
@@ -1352,7 +1362,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                             )}
 
                             {expandedItemId === item.id && (
-                            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '10px', padding: '14px 16px', background: '#FAF8F5', border: '1px solid #E6E1DB', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '10px', padding: '14px 16px', background: 'var(--bg)', border: '1px solid #E6E1DB', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                               <PrereqDetails item={item} />
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12.5px', color: '#6E6862', flexWrap: 'wrap' }}>
                               {editingOwnerId === item.id ? (
@@ -1383,20 +1393,20 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); setEditingOwnerId(null); }}
-                                    style={{ border: '2px solid #E6E1DB', background: '#FFFFFF', borderRadius: '9999px', padding: '4px 12px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700 }}
+                                    style={{ border: '2px solid #E6E1DB', background: 'var(--surface)', borderRadius: '9999px', padding: '4px 12px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700 }}
                                   >
                                     Cancel
                                   </button>
                                 </>
                               ) : (
                                 <>
-                                  <span>Owner: <strong style={{ color: '#1F1B17' }}>{item.owner || 'Needs assignment'}</strong></span>
+                                  <span>Owner: <strong style={{ color: '#1F1B17' }}>{cleanOwner(item.owner)}</strong></span>
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); startOwnerEdit(item); }}
                                     aria-label={`Edit owner for ${item.name}`}
                                     title="Assign or change owner"
-                                    style={{ border: '1.5px solid #D8D0C7', background: '#FFFFFF', borderRadius: '9999px', padding: '2px 9px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#575049' }}
+                                    style={{ border: '1.5px solid #D8D0C7', background: 'var(--surface)', borderRadius: '9999px', padding: '2px 9px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#575049' }}
                                   >
                                     Assign
                                   </button>
@@ -1419,28 +1429,11 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {/* Status Badge */}
                           {isVerified ? (
-                            <span style={{
-                              background: '#1F1B17',
-                              color: '#FFFFFF',
-                              padding: '5px 14px',
-                              borderRadius: '9999px',
-                              fontSize: '11.5px',
-                              fontWeight: 800
-                            }}>
-                              Verified
+                            <span className="pd-pill ok">
+                              <Check size={13} strokeWidth={3} /> Verified
                             </span>
                           ) : isSubmitted ? (
-                            <span style={{
-                              background: '#FEF7F0',
-                              color: '#EA580C',
-                              border: '1.5px solid #FED7AA',
-                              padding: '5px 14px',
-                              borderRadius: '9999px',
-                              fontSize: '11.5px',
-                              fontWeight: 800
-                            }}>
-                              In Review
-                            </span>
+                            <span className="pd-pill warn">In Review</span>
                           ) : null}
 
                           <button
@@ -1491,7 +1484,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                                 }}
                                 disabled={isVerifying}
                                 style={{
-                                  background: '#FFFFFF',
+                                  background: 'var(--surface)',
                                   color: '#ED7D31',
                                   border: '2px solid #FED7AA',
                                   borderRadius: '9999px',
@@ -1556,19 +1549,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
                                 e.stopPropagation();
                                 handleToggleCheck(e, item);
                               }}
-                              style={{
-                                background: '#FFFFFF',
-                                border: '2px solid #E6E1DB',
-                                borderRadius: '9999px',
-                                padding: '5px 14px',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                                color: '#475569',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseOver={(e) => { e.currentTarget.style.borderColor = '#D8D0C7'; e.currentTarget.style.color = '#1F1B17'; }}
-                              onMouseOut={(e) => { e.currentTarget.style.borderColor = '#E6E1DB'; e.currentTarget.style.color = '#475569'; }}
+                              className="pd-soft-btn"
                             >
                               Reset
                             </button>
@@ -1581,7 +1562,7 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
 
                   {filteredItems.length === 0 && (
                     <div style={{
-                      background: '#FFFFFF',
+                      background: 'var(--surface)',
                       borderRadius: '20px',
                       padding: '3rem 1.5rem',
                       textAlign: 'center',

@@ -1,13 +1,92 @@
+import { useState } from 'react';
 import { COMBO, norm } from '../../utils/helpers';
 import { useAuth } from '../../context/AuthContext';
-import { Zap, Wrench } from 'lucide-react';
+import { Zap, Pencil, Copy, Trash2 } from 'lucide-react';
 
+import { dialog } from '../../utils/dialog';
+import Dropdown from '../common/Dropdown';
+import ContextMenu from '../common/ContextMenu';
+import PersonEditModal from '../PersonEditModal';
+import { notifyAssignment } from '../../services/notifications';
 export default function Team({ data, updateData, ui, setUi }) {
-  const { canEditMembers, canEditTeamInvolvement, isOwnMember } = useAuth();
+  const { user, canEditMembers, canEditTeamInvolvement, isOwnMember } = useAuth();
   const canEdit = canEditMembers();
   const { members=[], matrixProjects=[] } = data;
   const { teamView='people', teamFilter='' } = ui;
   const set = patch => setUi(prev => ({...prev,...patch}));
+  const [addOpen, setAddOpen] = useState(false);
+  const [mxFilter, setMxFilter] = useState('');
+  const [hideClosed, setHideClosed] = useState(false);
+  const blankPerson = { name:'', role:'', email:'', github:'', skills:'', combo:'', projects:[] };
+  const [np, setNp] = useState(blankPerson);
+  const [npErr, setNpErr] = useState('');
+
+  const ROLES = ['PM','Lead','ML','Sr. ML','Jr. ML','ML-Intern','BE','FE','FE + BE','DE','Intern'];
+
+  const submitPerson = (e) => {
+    e.preventDefault();
+    if (!canEdit) return;
+    const name = np.name.trim(), role = np.role.trim(), email = np.email.trim().toLowerCase();
+    if (!name || !role) { setNpErr('Name and role are required.'); return; }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setNpErr('Enter a valid email address.'); return; }
+    if (members.some(m => m.name.trim().toLowerCase() === name.toLowerCase())) { setNpErr('Someone with this name already exists.'); return; }
+    if (email && members.some(m => (m.email||'').toLowerCase() === email)) { setNpErr('This email is already on the team.'); return; }
+    updateData(prev => ({
+      ...prev,
+      members: [...prev.members, { role, name, projects: np.projects, email, github: np.github.trim().replace(/^@/, ''), skills: np.skills.trim(), combo: np.combo, note: '' }],
+    }));
+    np.projects.forEach(pn => notifyAssignment({ actor: user?.name, project: pn, people: [{ email }] }));
+    setNp(blankPerson); setNpErr(''); setAddOpen(false);
+  };
+
+  const closeAdd = () => { setAddOpen(false); setNpErr(''); setNp(blankPerson); };
+
+  // Right-click menu on a person card, and the edit dialog it opens
+  const [pctx, setPctx] = useState(null);       // { x, y, m }
+  const [editing, setEditing] = useState(null); // { m, mode: 'self' | 'full' }
+
+  const copyText = async (text) => { try { await navigator.clipboard.writeText(text); } catch { /* ignore */ } };
+
+  const savePerson = (orig, patch) => {
+    updateData(prev => {
+      const next = { ...prev, members: prev.members.map(x => (x.name === orig.name ? { ...x, ...patch } : x)) };
+      // keep leave and hygiene history attached if the name changed
+      if (patch.name && patch.name !== orig.name) {
+        if (next.leave && next.leave[orig.name]) {
+          next.leave = { ...next.leave, [patch.name]: next.leave[orig.name] };
+          delete next.leave[orig.name];
+        }
+        if (next.hygiene) {
+          const h = {};
+          Object.entries(next.hygiene).forEach(([wk, people]) => {
+            const copy = { ...people };
+            if (copy[orig.name]) { copy[patch.name] = copy[orig.name]; delete copy[orig.name]; }
+            h[wk] = copy;
+          });
+          next.hygiene = h;
+        }
+      }
+      return next;
+    });
+    setEditing(null);
+  };
+
+  const personMenu = (m) => {
+    const mine = isOwnMember(m.name, m.email);
+    const items = [];
+    if (mine) {
+      items.push({ label: 'Edit my skills', icon: <Pencil size={15} />, onClick: () => setEditing({ m, mode: 'self' }) });
+    }
+    if (canEdit) {
+      items.push({ label: 'Edit details…', icon: <Pencil size={15} />, onClick: () => setEditing({ m, mode: 'full' }) });
+    }
+    if (m.email) items.push({ label: 'Copy email', icon: <Copy size={15} />, onClick: () => copyText(m.email) });
+    if (canEdit && !mine) {
+      items.push('sep');
+      items.push({ label: 'Remove from team', icon: <Trash2 size={15} />, danger: true, onClick: () => removeMember(m) });
+    }
+    return items;
+  };
 
   const comboDesc = {
     Gold:'Mentor combo: the senior leads design while the intern covers data prep and evals.',
@@ -17,6 +96,15 @@ export default function Team({ data, updateData, ui, setUi }) {
   };
 
   // People view
+  const removeMember = async (m) => {
+    if (!canEdit) return;
+    if (!(await dialog.confirm(`${m.name} (${m.role}) will no longer appear in the Team, Leave or Hygiene views.`, { title: 'Remove from the team?', variant: 'danger', confirmLabel: 'Remove' }))) return;
+    updateData(prev => ({
+      ...prev,
+      members: prev.members.filter(x => x.name !== m.name),
+    }));
+  };
+
   const renderPeople = () => {
     const q = teamFilter.toLowerCase();
     const filtered = members.filter(m =>
@@ -31,13 +119,13 @@ export default function Team({ data, updateData, ui, setUi }) {
         <div className="people">
           {filtered.map(m => {
             const active = m.projects.filter(p => {
-              const mp = matrixProjects.find(x => x.name === p);
+              const mp = matrixProjects.find(x => norm(x.name) === norm(p));
               return !mp || mp.status !== 'Closed';
             });
             const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('');
             const isMe = isOwnMember(m.name, m.email);
             return (
-              <article key={m.name} className="person" style={isMe ? { border: '1.5px solid #86EFAC', background: '#F8FAF8' } : {}}>
+              <article key={m.name} className="person" data-me={isMe ? 'true' : undefined} onContextMenu={(e) => { e.preventDefault(); setPctx({ x: e.clientX, y: e.clientY, m }); }}>
                 <div className="ph">
                   {m.combo
                     ? <span className={`tile t-${m.combo.toLowerCase()}`} title={m.combo}>{COMBO[m.combo]}</span>
@@ -76,6 +164,18 @@ export default function Team({ data, updateData, ui, setUi }) {
                           <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                         </svg>
                       </a>
+                    )}
+                    {canEdit && !isMe && (
+                      <button
+                        type="button"
+                        className="person-icon-btn person-remove"
+                        title={`Remove ${m.name} from the team`}
+                        aria-label={`Remove ${m.name}`}
+                        onClick={() => removeMember(m)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+                        </svg>
+                      </button>
                     )}
                     {m.github && (
                       <a
@@ -187,7 +287,7 @@ export default function Team({ data, updateData, ui, setUi }) {
                 {ms.map(m => {
                   const isMe = isOwnMember(m.name, m.email);
                   return (
-                    <li key={m.name} className="combo-member-item" style={isMe ? { border: '1px solid #86EFAC', background: '#F0FDF4' } : {}}>
+                    <li key={m.name} className="combo-member-item" data-me={isMe ? 'true' : undefined}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
                         {isMe && (
@@ -229,38 +329,6 @@ export default function Team({ data, updateData, ui, setUi }) {
         })}
       </div>
 
-      <section className="specialist-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--line)', paddingBottom: '12px' }}>
-          <span style={{
-            width: '26px',
-            height: '26px',
-            borderRadius: '6px',
-            background: 'var(--soft)',
-            color: 'var(--accent-text)',
-            border: '1px solid var(--line)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Wrench size={14} strokeWidth={2.2} />
-          </span>
-          <h2 style={{ fontSize: '15px', margin: 0, fontWeight: 700 }}>Specialist Engineering Pool</h2>
-        </div>
-        <div className="specialist-grid">
-          <div className="specialist-item">
-            <div className="specialist-role-title">Python Backend</div>
-            <div className="specialist-names">Saurav, Suren, Megh, Pranav, Praveen</div>
-          </div>
-          <div className="specialist-item">
-            <div className="specialist-role-title">Frontend & Full-Stack</div>
-            <div className="specialist-names">Syed, Abhishek, Praveen <span style={{ fontSize: '11px', color: 'var(--muted)' }}>(Syed reviews)</span></div>
-          </div>
-          <div className="specialist-item">
-            <div className="specialist-role-title">Data Engineering</div>
-            <div className="specialist-names">Mani Sekar</div>
-          </div>
-        </div>
-      </section>
     </>
   );
 
@@ -282,80 +350,99 @@ export default function Team({ data, updateData, ui, setUi }) {
         alert(`You can only update your own project involvement. PMs and TLs can edit all team members.`);
         return;
       }
+      // notify the person when someone else adds them to / removes them from a project
+      const target = members[memberIdx];
+      if (target && !isOwnMember(target.name, target.email)) {
+        const had = (target.projects || []).some(x => norm(x) === norm(projectName));
+        notifyAssignment({ actor: user?.name, project: projectName, people: [target], removed: had });
+      }
       updateData(prev => {
         const ms = [...prev.members];
         const m = {...ms[memberIdx]};
-        const pi = m.projects.indexOf(projectName);
-        m.projects = pi >= 0
-          ? m.projects.filter(p => p !== projectName)
+        const has = m.projects.some(p => norm(p) === norm(projectName));
+        m.projects = has
+          ? m.projects.filter(p => norm(p) !== norm(projectName))
           : [...m.projects, projectName];
         ms[memberIdx] = m;
         return {...prev, members: ms};
       });
     };
 
+    const q = mxFilter.trim().toLowerCase();
+    const cols = matrixProjects
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => !(hideClosed && p.status === 'Closed'));
+    const rows = members
+      .map((m, mi) => ({ m, mi }))
+      .filter(({ m }) => !q || (m.name + ' ' + m.role).toLowerCase().includes(q));
+    const headcount = name => members.filter(m => m.projects.some(x => norm(x) === norm(name))).length;
+    const dotFor = st => st === 'Closed' ? '#A39C95' : st === 'Hold' ? '#F2A23A' : st === 'Dev in progress' ? '#3DA56A' : '#4A7CF0';
+
     return (
       <>
-        <p className="small muted">
+        <div className="mx2-bar">
+          <input className="search" type="search" placeholder="Filter people by name or role"
+            value={mxFilter} onChange={e => setMxFilter(e.target.value)} aria-label="Filter matrix by person" />
+          <label className="mx2-toggle">
+            <input type="checkbox" checked={hideClosed} onChange={e => setHideClosed(e.target.checked)} />
+            <span>Hide closed projects</span>
+          </label>
+          <span className="mx2-legend"><i className="inv on">✓</i> Involved <i className="inv" /> Not involved</span>
+        </div>
+        <p className="small muted" style={{ margin: '4px 0 12px' }}>
           {canEdit
-            ? 'Tap a cell to mark someone involved or not. Closed projects are excluded from active counts.'
-            : 'You can tap your own row to update your project involvement. Other rows are view-only.'}
+            ? 'Click a cell to add or remove someone from a project. The bottom row shows headcount per project.'
+            : 'You can click your own row to update your project involvement. Other rows are view-only.'}
         </p>
-        <div className="scroll">
-          <table className="tbl mx tm">
+        <div className="scroll mx2-wrap">
+          <table className="mx2">
             <thead>
               <tr>
-                <th className="sticky">Team member</th>
-                <th className="r">Active</th>
-                {matrixProjects.map(p => (
-                  <th key={p.name} className="vert"><span>{p.name}</span></th>
-                ))}
-              </tr>
-              <tr>
-                <th className="sticky">Status</th>
-                <th></th>
-                {matrixProjects.map((p,i) => (
-                  <th key={p.name} className="c">
-                    <select
-                      className="mini"
-                      value={p.status}
-                      onChange={e => setProjectStatus(i, e.target.value)}
-                      disabled={!canEdit}
-                      style={!canEdit ? { opacity: 0.85, cursor: 'default' } : {}}
-                      aria-label={`${p.name} status`}>
-                      {statusOptions.map(s => <option key={s}>{s}</option>)}
-                    </select>
+                <th className="sticky mx2-person">Team member</th>
+                <th className="c">Active</th>
+                {cols.map(({ p, i }) => (
+                  <th key={p.name} className={`mx2-proj${p.status==='Closed' ? ' closed' : ''}`}>
+                    <div className="mx2-pname" title={p.name}>{p.name}</div>
+                    <div className="mx2-pstatus">
+                      <i style={{ background: dotFor(p.status) }} />
+                      {canEdit ? (
+                        <select value={p.status} onChange={e => setProjectStatus(i, e.target.value)} aria-label={`${p.name} status`}>
+                          {statusOptions.map(st => <option key={st}>{st}</option>)}
+                        </select>
+                      ) : <span>{p.status}</span>}
+                    </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {members.map((m, mi) => {
-                const active = m.projects.filter(p => {
-                  const mp = matrixProjects.find(x => x.name === p);
+              {rows.map(({ m, mi }) => {
+                const active = m.projects.filter(pn => {
+                  const mp = matrixProjects.find(x => norm(x.name) === norm(pn));
                   return mp && mp.status !== 'Closed';
                 }).length;
                 const isMe = isOwnMember(m.name, m.email);
                 const canEditRow = canEditTeamInvolvement(m.name, m.email);
                 return (
-                  <tr key={m.name} style={isMe ? { background: '#F0FDF4' } : {}}>
-                    <td className="sticky">
+                  <tr key={m.name} data-me={isMe ? 'true' : undefined}>
+                    <td className="sticky mx2-person">
                       <b>{m.name}</b>
-                      {isMe && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>You</span>}
-                      {' '}<span className="small muted">{m.role}</span>
+                      {isMe && <span className="mx2-you">You</span>}
+                      <span className="small muted"> {m.role}</span>
                     </td>
-                    <td className="r">{active}</td>
-                    {matrixProjects.map(p => {
-                      const on = m.projects.includes(p.name);
+                    <td className="c"><span className="mx2-count">{active}</span></td>
+                    {cols.map(({ p }) => {
+                      const on = m.projects.some(x => norm(x) === norm(p.name));
                       return (
-                        <td key={p.name} className={`cc${p.status==='Closed'?' closed':''}`}>
+                        <td key={p.name} className={`c${p.status==='Closed' ? ' closed' : ''}`}>
                           <button
-                            className={`inv${on?' on':''}`}
+                            className={`inv${on ? ' on' : ''}`}
+                            disabled={!canEditRow}
                             onClick={() => toggleInvolvement(mi, p.name, m.name, m.email)}
-                            style={!canEditRow ? { cursor: 'not-allowed', opacity: on ? 0.9 : 0.3 } : {}}
-                            title={canEditRow ? `Click to toggle ${m.name} on ${p.name}` : `Only PMs/TLs can edit other members`}
+                            title={canEditRow ? `${on ? 'Remove' : 'Add'} ${m.name} ${on ? 'from' : 'to'} ${p.name}` : 'Only PMs/TLs can edit other members'}
                             aria-pressed={on}
                             aria-label={`${m.name} on ${p.name}`}>
+                            {on ? '✓' : ''}
                           </button>
                         </td>
                       );
@@ -363,7 +450,17 @@ export default function Team({ data, updateData, ui, setUi }) {
                   </tr>
                 );
               })}
+              {rows.length === 0 && (
+                <tr><td colSpan={cols.length + 2} className="muted" style={{ padding: 24, textAlign: 'center' }}>No one matches that filter.</td></tr>
+              )}
             </tbody>
+            <tfoot>
+              <tr>
+                <td className="sticky mx2-person"><b>Headcount</b></td>
+                <td className="c"></td>
+                {cols.map(({ p }) => <td key={p.name} className="c"><span className="mx2-count">{headcount(p.name)}</span></td>)}
+              </tr>
+            </tfoot>
           </table>
         </div>
       </>
@@ -379,7 +476,68 @@ export default function Team({ data, updateData, ui, setUi }) {
             <button key={v} className={teamView===v?'on':''} onClick={() => set({teamView:v})}>{l}</button>
           ))}
         </div>
+        {canEdit && (
+          <button type="button" className="btn" style={{ marginLeft: 'auto' }} onClick={() => setAddOpen(true)}>+ Add person</button>
+        )}
       </div>
+      {addOpen && canEdit && (
+        <div className="dlg-backdrop" onClick={e => e.target===e.currentTarget && closeAdd()}>
+          <dialog open style={{display:'block'}} aria-label="Add person">
+            <form onSubmit={submitPerson}>
+              <h2 style={{ marginTop: 0 }}>Add person</h2>
+              <div className="fgrid">
+                <label><span>Name *</span>
+                  <input autoFocus value={np.name} onChange={e => setNp({...np, name:e.target.value})} />
+                </label>
+                <div className="dd-field"><span>Role *</span>
+                  <Dropdown value={np.role} onChange={v => setNp({ ...np, role: v })} options={ROLES} placeholder="Select role" searchAt={6} />
+                </div>
+                <label><span>Email</span>
+                  <input type="email" value={np.email} onChange={e => setNp({...np, email:e.target.value})} />
+                </label>
+                <label><span>GitHub</span>
+                  <input value={np.github} onChange={e => setNp({...np, github:e.target.value})} placeholder="username" />
+                </label>
+                <div className="dd-field"><span>ML combo</span>
+                  <Dropdown value={np.combo} onChange={v => setNp({ ...np, combo: v })} options={[{ value: '', label: 'None' }, ...Object.keys(COMBO)]} />
+                </div>
+                <label><span>Skills</span>
+                  <input value={np.skills} onChange={e => setNp({...np, skills:e.target.value})} placeholder="comma separated" />
+                </label>
+              </div>
+              <div className="team-picker" style={{ marginTop: 12 }}>
+                <div className="team-picker-head"><span>Projects</span><em>{np.projects.length} selected</em></div>
+                <div className="team-picker-grid">
+                  {matrixProjects.filter(p => p.status !== 'Closed').map(p => (
+                    <label key={p.name} className="member-check">
+                      <input type="checkbox" checked={np.projects.includes(p.name)}
+                        onChange={() => setNp({...np, projects: np.projects.includes(p.name) ? np.projects.filter(x => x!==p.name) : [...np.projects, p.name]})} />
+                      <span><b>{p.name}</b></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {npErr && <p role="alert" style={{ color: '#D9482F', fontSize: 13, margin: '10px 0 0' }}>{npErr}</p>}
+              <div className="dacts">
+                <button type="button" className="btn ghost" onClick={closeAdd}>Cancel</button>
+                <button type="submit" className="btn">Add person</button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      )}
+      {pctx && <ContextMenu x={pctx.x} y={pctx.y} title={pctx.m.name} items={personMenu(pctx.m)} onClose={() => setPctx(null)} />}
+      {editing && (
+        <PersonEditModal
+          member={editing.m}
+          mode={editing.mode}
+          combos={Object.keys(COMBO)}
+          takenNames={members.filter(x => x.name !== editing.m.name).map(x => x.name)}
+          takenEmails={members.filter(x => x.name !== editing.m.name).map(x => (x.email || '').toLowerCase()).filter(Boolean)}
+          onClose={() => setEditing(null)}
+          onSave={(patch) => savePerson(editing.m, patch)}
+        />
+      )}
       {teamView==='people' && renderPeople()}
       {teamView==='combos' && renderCombos()}
       {teamView==='matrix' && renderMatrix()}

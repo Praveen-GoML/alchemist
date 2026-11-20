@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { 
   Award, Printer, Share2, Check, ArrowLeft, Loader2 
 } from 'lucide-react';

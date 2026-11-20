@@ -5,7 +5,6 @@ import Checklist from './views/Checklist';
 import Team from './views/Team';
 import Improvements from './views/Improvements';
 import Links from './views/Links';
-import Playbook from './views/Playbook';
 import Hygiene from './views/Hygiene';
 import Leave from './views/Leave';
 import Prereq from './views/Prereq';
@@ -25,6 +24,9 @@ function MainContent({ view, param, data, updateData, ui, setUi }) {
     if (prevView.current === view) return;
 
     prevView.current = view;
+
+    // Pre-req loads real data and shows its own skeleton; a second one would just flash
+    if (view === 'prereq') { setShowSkeleton(false); return; }
 
     // Show skeleton for 500ms when switching views
     clearTimeout(timerRef.current);
@@ -52,8 +54,6 @@ function MainContent({ view, param, data, updateData, ui, setUi }) {
         return <Improvements data={data} updateData={updateData} />;
       case 'links':
         return <Links data={data} updateData={updateData} />;
-      case 'playbook':
-        return <Playbook />;
       case 'hygiene':
         return <Hygiene data={data} updateData={updateData} ui={ui} setUi={setUi} />;
       case 'leave':
@@ -73,7 +73,7 @@ function MainContent({ view, param, data, updateData, ui, setUi }) {
 
   return (
     <main id="main" tabIndex="-1">
-      {showSkeleton ? <SkeletonView view={skelView} /> : renderView()}
+      {showSkeleton ? <SkeletonView view={skelView} data={data} ui={ui} /> : renderView()}
     </main>
   );
 }

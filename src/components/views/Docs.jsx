@@ -1,4 +1,6 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { safeUrl } from '../../utils/safeUrl';
+import { norm } from '../../utils/helpers';
 import { 
   FolderPlus, 
   FileText, 
@@ -21,8 +23,9 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { uploadProjectFileToFirebase, isFirebaseStorageReady } from '../../services/firebaseStorage';
+import { uploadProjectFile, getStorageStatus, ALLOWED_EXT, MAX_UPLOAD_MB } from '../../services/documentStorage';
 
+import { dialog } from '../../utils/dialog';
 const DEFAULT_CATEGORIES = [
   { id: 'brd', label: 'BRD & Specs', icon: FileText, color: '#3B82F6' },
   { id: 'excel', label: 'Excel & Trackers', icon: FileSpreadsheet, color: '#10B981' },
@@ -41,8 +44,8 @@ export default function Docs({ data, updateData }) {
     if (!user || isManagementUser) return projects;
     const myMember = (data.members || []).find(m => isOwnMember(m.name, m.email));
     if (!myMember) return [];
-    const myProjectNames = (myMember.projects || []).map(p => p.replace(/\s+/g, '').toLowerCase());
-    return projects.filter(p => myProjectNames.includes(p.name.replace(/\s+/g, '').toLowerCase()));
+    const myProjectNames = (myMember.projects || []).map(norm);
+    return projects.filter(p => myProjectNames.includes(norm(p.name)));
   }, [user, isManagementUser, data.members, projects, isOwnMember]);
 
   const [selectedProject, setSelectedProject] = useState(() => {
@@ -56,6 +59,8 @@ export default function Docs({ data, updateData }) {
   const [isAddingDoc, setIsAddingDoc] = useState(false);
   const [addMode, setAddMode] = useState('upload'); // 'upload' or 'link'
   const [isUploading, setIsUploading] = useState(false);
+  const [storage, setStorage] = useState(null); // { storage: 'dropbox' | 'local' }
+  useEffect(() => { let on = true; getStorageStatus().then(r => on && setStorage(r)); return () => { on = false; }; }, []);
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
@@ -80,16 +85,11 @@ export default function Docs({ data, updateData }) {
     e.preventDefault();
     if (!canEdit || !selectedFile) return;
 
-    const allowedExtensions = ['.xlsx', '.xls', '.csv', '.pdf', '.docx', '.doc'];
+    const allowedExtensions = ALLOWED_EXT;
     const fileExt = '.' + selectedFile.name.split('.').pop().toLowerCase();
     
     if (!allowedExtensions.includes(fileExt)) {
-      setUploadError(`Only BRD documents (.pdf, .docx) and Excel spreadsheets (.xlsx, .xls, .csv) can be uploaded to cloud storage. You tried to upload ${fileExt}.`);
-      return;
-    }
-
-    if (!isFirebaseStorageReady()) {
-      setUploadError('Firebase Cloud Storage is not available.');
+      setUploadError(`${fileExt} files can't be uploaded. Allowed: ${ALLOWED_EXT.join(' ')}`);
       return;
     }
 
@@ -97,7 +97,7 @@ export default function Docs({ data, updateData }) {
     setUploadError('');
 
     try {
-      const res = await uploadProjectFileToFirebase(selectedProject, selectedFile);
+      const res = await uploadProjectFile(selectedProject, selectedFile);
       
       // Auto-detect whether this is an Excel file or BRD document
       const isExcel = ['.xlsx', '.xls', '.csv'].includes(fileExt);
@@ -108,10 +108,10 @@ export default function Docs({ data, updateData }) {
         title: form.title.trim() || selectedFile.name,
         url: res.publicUrl,
         category: autoCategory,
-        notes: form.notes.trim() || `Cloud Storage • ${isExcel ? 'Excel Sheet' : 'BRD Document'} (${(selectedFile.size / 1024).toFixed(1)} KB)`,
+        notes: form.notes.trim() || `${res.storageProvider} • ${isExcel ? 'Excel Sheet' : 'BRD Document'} (${(selectedFile.size / 1024).toFixed(1)} KB)`,
         isUploaded: true,
         fileName: selectedFile.name,
-        storageProvider: 'Firebase Cloud Storage',
+        storageProvider: res.storageProvider,
         addedBy: user?.name || 'Team Lead',
         addedAt: new Date().toISOString(),
       };
@@ -175,8 +175,8 @@ export default function Docs({ data, updateData }) {
     setIsAddingDoc(false);
   };
 
-  const handleDeleteDoc = (docId) => {
-    if (!canEdit || !confirm('Remove this document link?')) return;
+  const handleDeleteDoc = async (docId) => {
+    if (!canEdit || !(await dialog.confirm('The file stays in Dropbox or Drive; only this entry is removed from the project.', { title: 'Remove this document?', variant: 'danger', confirmLabel: 'Remove' }))) return;
     updateData(prev => {
       const existing = prev.projectDocs || {};
       const projList = existing[selectedProject] || [];
@@ -201,7 +201,7 @@ export default function Docs({ data, updateData }) {
   });
 
   return (
-    <div>
+    <div className="docs2">
       {/* Top Banner / Header */}
       <div className="greet" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -211,7 +211,7 @@ export default function Docs({ data, updateData }) {
               Project Docs & Cloud Storage
             </h2>
             <p className="hint" style={{ margin: '4px 0 0' }}>
-              Upload files directly (Excel, BRD, PDF, Word) to Firebase Cloud Storage or link SharePoint and Google Drive trackers. Zero keys required.
+              One place for every project's BRDs, trackers and specs. Upload a file to Dropbox, or paste a Drive / SharePoint link.
             </p>
           </div>
 
@@ -349,19 +349,21 @@ export default function Docs({ data, updateData }) {
             })}
           </div>
 
-          {/* Quick Storage Notice */}
-          <div style={{
-            marginTop: '20px',
-            padding: '12px',
-            background: 'var(--soft)',
-            borderRadius: '8px',
-            border: '1px solid var(--line)',
-            fontSize: '12px',
-            color: 'var(--muted)',
-            lineHeight: 1.5
-          }}>
-            <strong style={{ color: 'var(--ink)', display: 'block', marginBottom: '4px' }}>💡 Free Cloud Storage Tip:</strong>
-            Use Google Drive, SharePoint, or free AWS S3 bucket links. Paste the link here and everyone in the team has immediate 1-click access!
+          {/* Storage status */}
+          <div className="docs2-howto">
+            <div className="docs2-howto-title">Online storage</div>
+            {storage?.storage === 'dropbox' ? (
+              <p className="docs2-ok"><i className="docs2-dot ok" /> Connected to Dropbox. Uploads are stored online and shared by link with the team.</p>
+            ) : storage?.storage === 'local' ? (
+              <p className="docs2-ok"><i className="docs2-dot warn" /> Dropbox is not connected yet, so uploads are kept on the server disk only. Ask an admin to add the Dropbox keys in the backend (see <b>dropbox_setup.py</b>).</p>
+            ) : (
+              <p className="docs2-ok"><i className="docs2-dot off" /> Upload server not reachable. You can still paste a Drive, SharePoint or Dropbox link.</p>
+            )}
+            <ol>
+              <li><b>Upload</b> a file (up to {MAX_UPLOAD_MB} MB), or</li>
+              <li><b>Paste a link</b> from Dropbox, Google Drive or SharePoint.</li>
+            </ol>
+            <p className="docs2-fine">Never put passwords or keys in documents.</p>
           </div>
         </div>
 
@@ -384,8 +386,8 @@ export default function Docs({ data, updateData }) {
                 style={{
                   width: '100%',
                   padding: '9px 12px 9px 36px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
+                  borderRadius: '12px',
+                  border: 'none',
                   background: 'var(--surface)',
                   fontSize: '13.5px',
                   outline: 'none',
@@ -501,7 +503,7 @@ export default function Docs({ data, updateData }) {
                     {/* Card Bottom: Open Link Button */}
                     <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--line)' }}>
                       <a
-                        href={doc.url}
+                        href={safeUrl(doc.url) || undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -612,7 +614,7 @@ export default function Docs({ data, updateData }) {
                 {/* Drag and drop / file selector box */}
                 <div>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '4px' }}>
-                    Select File (BRD & Excel Only) *
+                    Select File (max {MAX_UPLOAD_MB} MB) *
                   </label>
                   <div
                     onClick={() => fileInputRef.current?.click()}
@@ -630,7 +632,7 @@ export default function Docs({ data, updateData }) {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".xlsx,.xls,.csv,.pdf,.docx,.doc"
+                      accept={ALLOWED_EXT.join(',')}
                       style={{ display: 'none' }}
                       onChange={e => {
                         const file = e.target.files[0];

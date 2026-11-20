@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { X, Loader2 } from 'lucide-react';
 import { API_URL } from '../apiConfig';
 
@@ -50,7 +50,7 @@ export const RejectModal = ({ isOpen, onClose, item, onRejected }) => {
           <button 
             onClick={onClose} 
             style={{ 
-              background: '#FFFFFF', 
+              background: 'var(--surface)', 
               border: '1.5px solid #E6E1DB', 
               borderRadius: '50%', 
               width: '32px', 
@@ -101,7 +101,7 @@ export const RejectModal = ({ isOpen, onClose, item, onRejected }) => {
               type="button" 
               onClick={onClose} 
               style={{
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#1F1B17',
                 border: '2px solid #E6E1DB',
                 borderRadius: '9999px',

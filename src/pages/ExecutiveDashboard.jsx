@@ -1,25 +1,36 @@
 ﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { 
   CheckCircle, Clock, AlertTriangle, Plus, Upload, 
   ExternalLink, ArrowRight, Sparkles, Building2, Server, 
   ChevronRight, Award, ShieldAlert, CheckCircle2, Search,
   ShieldCheck, Lock, Layers, Calendar, ArrowUpRight,
-  Trash2, RefreshCw, FileText, Check
+  Trash2, RefreshCw, FileText, Check, Pencil, Copy, MoreHorizontal
 } from 'lucide-react';
 
 import { API_URL } from '../apiConfig';
+import { useAuth } from '../context/AuthContext';
+import { useProjectScope } from '../hooks/useProjectScope';
+import { SkeletonPrereqRows } from '../components/common/Skeleton';
 
-export const ExecutiveDashboard = ({ onOpenCopilot }) => {
-  const [projects, setProjects] = useState([]);
+import { dialog } from '../utils/dialog';
+import ContextMenu from '../components/common/ContextMenu';
+import InitiativeEditModal from '../components/InitiativeEditModal';
+export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
+  const { isAdmin, isManagementUser } = useAuth();
+  const canAdmin = isAdmin();
+  const canManage = !!isManagementUser;
+  const canSeed = canAdmin && import.meta.env.DEV; // demo seeding is dev-only
+  const [allProjects, setProjects] = useState([]);
+  const { canSeeAny } = useProjectScope(appData?.members || []);
+  // Members only see pre-req trackers for their own projects
+  const projects = useMemo(() => allProjects.filter(p => canSeeAny(p.client_name, p.name)), [allProjects, canSeeAny]);
   const [stats, setStats] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [industryFilter, setIndustryFilter] = useState('ALL');
-  const [deploymentFilter, setDeploymentFilter] = useState('ALL');
-  const [dynamicIndustries, setDynamicIndustries] = useState([]);
-  const [dynamicDeployments, setDynamicDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [ctx, setCtx] = useState(null);       // { x, y, proj } for the right-click menu
+  const [editProj, setEditProj] = useState(null);
   const [isClearing, setIsClearing] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -47,19 +58,12 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
 
   const fetchData = async () => {
     try {
-      const [projRes, statsRes, tmplRes] = await Promise.all([
+      const [projRes, statsRes] = await Promise.all([
         axios.get(`${API_URL}/projects`),
         axios.get(`${API_URL}/projects/dashboard-stats`),
-        axios.get(`${API_URL}/templates`).catch(() => ({ data: {} }))
       ]);
       setProjects(projRes.data || []);
       setStats(statsRes.data);
-      if (tmplRes.data?.industries) {
-        setDynamicIndustries(tmplRes.data.industries);
-      }
-      if (tmplRes.data?.deployments) {
-        setDynamicDeployments(tmplRes.data.deployments);
-      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     } finally {
@@ -74,6 +78,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
   }, []);
 
   const handleClearAll = async () => {
+    if (!canAdmin) return;
     setIsClearing(true);
     try {
       await axios.post(`${API_URL}/projects/clear-all`);
@@ -96,9 +101,46 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
     }
   };
 
-  const handleDeleteProject = async (id, name, e) => {
+  const copyText = async (text, okMsg) => {
+    try { await navigator.clipboard.writeText(text); triggerToast(okMsg); }
+    catch { triggerToast('Could not copy. Your browser blocked clipboard access.'); }
+  };
+
+  const saveInitiative = async (payload) => {
+    const id = editProj.id;
+    const res = await axios.put(`${API_URL}/projects/${id}`, payload);
+    setProjects(prev => prev.map(p => (p.id === id ? { ...p, ...payload, ...(res.data || {}) } : p)));
+    setEditProj(null);
+    triggerToast('Initiative updated.');
+    fetchData();
+  };
+
+  const openMenu = (e, proj) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete initiative "${name}"?`)) return;
+    setCtx({ x: e.clientX, y: e.clientY, proj });
+  };
+
+  const menuItems = (proj) => {
+    const certOk = proj.score >= 90 && proj.critical_blockers === 0;
+    const items = [
+      { label: 'Open workspace', icon: <ArrowUpRight size={15} />, onClick: () => navigate(`/dashboard/${proj.id}`) },
+    ];
+    if (certOk) items.push({ label: 'View kick-off certificate', icon: <Award size={15} />, onClick: () => navigate(`/certificate/${proj.id}`) });
+    items.push({ label: 'Copy initiative name', icon: <Copy size={15} />, onClick: () => copyText(proj.name, 'Name copied.') });
+    if (canManage) {
+      items.push('sep');
+      items.push({ label: 'Edit details…', icon: <Pencil size={15} />, onClick: () => setEditProj(proj) });
+      items.push('sep');
+      items.push({ label: 'Delete initiative', icon: <Trash2 size={15} />, danger: true, onClick: () => handleDeleteProject(proj.id, proj.name) });
+    }
+    return items;
+  };
+
+  const handleDeleteProject = async (id, name, e) => {
+    if (!canManage) return;
+    e?.stopPropagation?.();
+    if (!(await dialog.confirm(`"${name}" and its prerequisite tracker will be permanently deleted.`, { title: 'Delete initiative?', variant: 'danger', confirmLabel: 'Delete' }))) return;
     try {
       await axios.delete(`${API_URL}/projects/${id}`);
       setProjects(prev => prev.filter(p => p.id !== id));
@@ -111,6 +153,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
   };
 
   const handleSeedDemo = async () => {
+    if (!canSeed) return;
     setIsSeedingDemo(true);
     try {
       await axios.post(`${API_URL}/projects/seed-demo`);
@@ -124,33 +167,17 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
     }
   };
 
-  // Compute unique dynamic industries and deployments
-  const allIndustries = useMemo(() => {
-    const fromProjects = projects.map(p => p.industry).filter(Boolean);
-    const combined = Array.from(new Set([...dynamicIndustries, ...fromProjects]));
-    return combined.sort();
-  }, [projects, dynamicIndustries]);
-
-  const allDeployments = useMemo(() => {
-    const fromProjects = projects.flatMap(p => (p.deployment ? p.deployment.split('|').map(s => s.trim()) : [])).filter(Boolean);
-    const combined = Array.from(new Set([...dynamicDeployments, ...fromProjects]));
-    return combined.sort();
-  }, [projects, dynamicDeployments]);
-
   const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-                          p.client_name.toLowerCase().includes(search.toLowerCase()) ||
-                          p.type.toLowerCase().includes(search.toLowerCase());
-    
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || [p.name, p.client_name, p.type, p.industry, p.deployment, p.description]
+      .some(v => String(v ?? '').toLowerCase().includes(q));
+
     const matchesStatus = statusFilter === 'ALL' ||
       (statusFilter === 'CLEARED' && p.status === 'Kick-off Cleared') ||
       (statusFilter === 'AT_RISK' && (p.status === 'At Risk' || p.status === 'Critical / Blocked')) ||
       (statusFilter === 'IN_PROGRESS' && p.status === 'In Progress');
 
-    const matchesIndustry = industryFilter === 'ALL' || p.industry === industryFilter;
-    const matchesDeployment = deploymentFilter === 'ALL' || (p.deployment && p.deployment.includes(deploymentFilter));
-
-    return matchesSearch && matchesStatus && matchesIndustry && matchesDeployment;
+    return matchesSearch && matchesStatus;
   });
 
   const getStatusBadge = (status) => {
@@ -172,7 +199,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
 
   return (
     <div style={{
-      background: '#FAF8F5',
+      background: 'var(--bg)',
       minHeight: '100vh',
       paddingBottom: '5rem',
       fontFamily: '"Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -216,7 +243,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
           padding: '1.5rem'
         }}>
           <div style={{
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             borderRadius: '20px',
             maxWidth: '480px',
             width: '100%',
@@ -228,12 +255,12 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
               width: '48px',
               height: '48px',
               borderRadius: '12px',
-              background: '#FEF2F2',
-              border: '1px solid #FECACA',
+              background: '#FFF3E8',
+              border: '1px solid #FED7AA',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#DC2626',
+              color: '#EA580C',
               marginBottom: '1.25rem'
             }}>
               <Trash2 size={24} />
@@ -269,7 +296,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                 onClick={handleClearAll}
                 disabled={isClearing}
                 style={{
-                  background: '#DC2626',
+                  background: '#EA580C',
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '10px',
@@ -277,7 +304,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                   fontSize: '13.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.35)'
+                  boxShadow: '0 4px 14px rgba(234, 88, 12, 0.35)'
                 }}
               >
                 {isClearing ? 'Clearing...' : 'Yes, Wipe All Data'}
@@ -287,263 +314,95 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
         </div>
       )}
 
-      {/* 1. EXECUTIVE DASHBOARD HEADER */}
-      <section style={{ background: '#FFFFFF', borderBottom: '1px solid #E6E1DB', padding: '1.25rem 0' }}>
+      {/* 1. HEADER + SUMMARY */}
+      <section className="pq-head">
         <div className="goml-container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: 0 }}>
+          <div className="pq-head-row">
             <div>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1F1B17', margin: 0, letterSpacing: '-0.025em' }}>Initiatives</h1>
-              <p style={{ fontSize: '13.5px', color: '#6E6862', margin: '4px 0 0 0' }}>
-                {projects.length} {projects.length === 1 ? 'initiative' : 'initiatives'} tracked across delivery clearance and client prerequisites.
-              </p>
+              <h1>Initiatives</h1>
+              <p>{projects.length} {projects.length === 1 ? 'initiative' : 'initiatives'} tracked across delivery clearance and client prerequisites.</p>
             </div>
-          <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            {projects.length > 0 && (
-              <button
-                onClick={() => setShowClearConfirm(true)}
-                style={{
-                  background: '#FFFFFF',
-                  color: '#DC2626',
-                  border: '1.5px solid #FECACA',
-                  borderRadius: '10px',
-                  padding: '8px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = '#FEF2F2'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = '#FFFFFF'; }}
-                title="Clear all initiatives from database"
-              >
-                <Trash2 size={13} color="#DC2626" />
-                <span>Clear All</span>
+            <div className="pq-actions">
+              {canAdmin && projects.length > 0 && (
+                <button type="button" className="pq-btn ghost" onClick={() => setShowClearConfirm(true)} title="Clear all initiatives from the database">
+                  <Trash2 size={14} /> Clear all
+                </button>
+              )}
+              {canSeed && (
+                <button type="button" className="pq-btn ghost" onClick={handleSeedDemo} disabled={isSeedingDemo}>
+                  <RefreshCw size={14} className={isSeedingDemo ? 'spin' : ''} /> {isSeedingDemo ? 'Seeding…' : 'Load demo'}
+                </button>
+              )}
+              <button type="button" className="pq-btn primary" onClick={() => navigate('/new')}>
+                <Plus size={16} strokeWidth={2.5} /> New initiative
               </button>
-            )}
-            <button
-              onClick={handleSeedDemo}
-              disabled={isSeedingDemo}
-              style={{
-                background: '#FFFFFF',
-                color: '#ED7D31',
-                border: '1.5px solid #FDEEE2',
-                borderRadius: '10px',
-                padding: '8px 16px',
-                fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.background = '#FEF7F0'; }}
-              onMouseOut={(e) => { e.currentTarget.style.background = '#FFFFFF'; }}
-            >
-              <RefreshCw size={13} className={isSeedingDemo ? 'spin' : ''} />
-              <span>{isSeedingDemo ? 'Seeding...' : 'Load Benchmark Demo'}</span>
-            </button>
-            <button
-              onClick={() => navigate('/new')}
-              style={{
-                background: '#ED7D31',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '8px 18px',
-                fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 14px rgba(237, 125, 49, 0.35)',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.background = '#D94E06'; }}
-              onMouseOut={(e) => { e.currentTarget.style.background = '#ED7D31'; }}
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              <span>New Initiative</span>
-            </button>
+            </div>
           </div>
-        </div>
 
+          {projects.length > 0 && (
+            <div className="pq-stats">
+              <div className="pq-stat"><span>Total</span><b>{projects.length}</b><small>initiatives tracked</small></div>
+              <div className="pq-stat ok"><span>Cleared</span><b>{clearedCount}</b><small>ready for kick-off</small></div>
+              <div className="pq-stat warn"><span>At risk</span><b>{atRiskCount}</b><small>need attention</small></div>
+              <div className="pq-stat"><span>In progress</span><b>{inProgressCount}</b><small>being prepared</small></div>
+              <div className="pq-stat"><span>Avg readiness</span><b>{projects.length ? Math.round(projects.reduce((n, p) => n + (Number(p.score) || 0), 0) / projects.length) : 0}%</b><small>across all trackers</small></div>
+            </div>
+          )}
         </div>
       </section>
 
       {/* 2. REGISTRY SECTION */}
-      <section style={{ paddingTop: '2rem' }}>
+      <section style={{ paddingTop: '1.25rem' }}>
         <div className="goml-container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h2 style={{ fontSize: '1.45rem', margin: 0, fontWeight: 800, color: '#1F1B17', letterSpacing: '-0.02em' }}>
-                Initiative Registry
-              </h2>
-              <p style={{ color: '#6E6862', fontSize: '13.5px', margin: '0.25rem 0 0' }}>
-                Track delivery clearance and gatekeepers for each active deployment.
-              </p>
-            </div>
-
-            {projects.length > 0 && (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <span style={{
-                  background: '#FFFFFF',
-                  border: '1px solid #E6E1DB',
-                  borderRadius: '8px',
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#575049'
-                }}>
-                  {filteredProjects.length} of {projects.length} Shown
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Table Filters Toolbar (Only show when projects exist) */}
+          {/* Search + status filter (only when initiatives exist) */}
           {projects.length > 0 && (
-            <div style={{
-              display: 'flex',
-              gap: '0.75rem',
-              alignItems: 'center',
-              marginBottom: '1.25rem',
-              flexWrap: 'wrap',
-              background: '#FFFFFF',
-              padding: '0.85rem 1.15rem',
-              borderRadius: '12px',
-              border: '1px solid #E6E1DB',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-            }}>
-              {/* Search */}
-              <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-                <Search size={15} color="#9A928A" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+            <div className="pq-toolbar">
+              <div className="pq-search">
+                <Search size={20} aria-hidden="true" />
                 <input
                   type="text"
-                  placeholder="Search by initiative name, client, or cloud..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 12px 7px 34px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #E6E1DB',
-                    fontSize: '13px',
-                    outline: 'none',
-                    background: '#FAF8F5',
-                    color: '#1F1B17',
-                    fontFamily: 'inherit'
-                  }}
+                  placeholder="Search initiatives by name, client, industry, cloud or type…"
+                  aria-label="Search initiatives"
                 />
+                {search && (
+                  <button type="button" className="pq-clear" onClick={() => setSearch('')} aria-label="Clear search">×</button>
+                )}
               </div>
-
-              {/* Status Filter Pills */}
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <div className="pq-tabs" role="tablist" aria-label="Filter by status">
                 {[
-                  { id: 'ALL', label: `All (${projects.length})` },
-                  { id: 'CLEARED', label: `Cleared (${clearedCount})` },
-                  { id: 'AT_RISK', label: `At Risk (${atRiskCount})` },
-                  { id: 'IN_PROGRESS', label: `In Progress (${inProgressCount})` }
+                  { id: 'ALL', label: 'All', n: projects.length },
+                  { id: 'CLEARED', label: 'Cleared', n: clearedCount },
+                  { id: 'AT_RISK', label: 'At risk', n: atRiskCount },
+                  { id: 'IN_PROGRESS', label: 'In progress', n: inProgressCount },
                 ].map(tab => (
                   <button
                     key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === tab.id}
+                    className={statusFilter === tab.id ? 'on' : ''}
                     onClick={() => setStatusFilter(tab.id)}
-                    style={{
-                      backgroundColor: statusFilter === tab.id ? '#1F1B17' : '#F5F1EC',
-                      color: statusFilter === tab.id ? '#FFFFFF' : '#475569',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '6px 14px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
                   >
-                    {tab.label}
+                    {tab.label}<span>{tab.n}</span>
                   </button>
                 ))}
+                {search && <span className="pq-count">{filteredProjects.length} of {projects.length} shown</span>}
               </div>
-
-              {/* Industry Filter */}
-              {allIndustries.length > 0 && (
-                <select
-                  value={industryFilter}
-                  onChange={(e) => setIndustryFilter(e.target.value)}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12.5px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #E6E1DB',
-                    background: '#FFFFFF',
-                    color: '#575049',
-                    outline: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 600
-                  }}
-                >
-                  <option value="ALL">All Industries</option>
-                  {allIndustries.map((ind) => (
-                    <option key={ind} value={ind}>{ind}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Deployment Filter */}
-              {allDeployments.length > 0 && (
-                <select
-                  value={deploymentFilter}
-                  onChange={(e) => setDeploymentFilter(e.target.value)}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12.5px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #E6E1DB',
-                    background: '#FFFFFF',
-                    color: '#575049',
-                    outline: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 600
-                  }}
-                >
-                  <option value="ALL">All Deployments</option>
-                  {allDeployments.map((dep) => (
-                    <option key={dep} value={dep}>{dep}</option>
-                  ))}
-                </select>
-              )}
             </div>
           )}
 
+          {ctx && <ContextMenu x={ctx.x} y={ctx.y} title={ctx.proj.name} items={menuItems(ctx.proj)} onClose={() => setCtx(null)} />}
+          {editProj && <InitiativeEditModal project={editProj} onClose={() => setEditProj(null)} onSave={saveInitiative} />}
+
           {/* 3. SKELETON LOADING STATE / TABLE / EMPTY STATE CONTAINER */}
           {loading ? (
-            <div style={{ background: '#FFFFFF', border: '1px solid #E6E1DB', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {[1, 2, 3, 4, 5].map(idx => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: '#FAF8F5', borderRadius: '12px', border: '1px solid #F5F1EC' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <div className="goml-skeleton" style={{ width: '40px', height: '40px', borderRadius: '10px' }} />
-                      <div>
-                        <div className="goml-skeleton" style={{ width: `${200 + (idx * 30)}px`, height: '18px', borderRadius: '4px', marginBottom: '8px' }} />
-                        <div className="goml-skeleton" style={{ width: '150px', height: '12px', borderRadius: '4px' }} />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div className="goml-skeleton" style={{ width: '100px', height: '24px', borderRadius: '9999px' }} />
-                      <div className="goml-skeleton" style={{ width: '80px', height: '32px', borderRadius: '8px' }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SkeletonPrereqRows rows={5} />
           ) : projects.length === 0 ? (
             /* EMPTY STATE (Aligned with Client Portal) */
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '1px solid #E6E1DB',
               borderRadius: '16px',
               padding: '4.5rem 2rem',
@@ -639,11 +498,12 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                   <span>Provision New Initiative</span>
                 </button>
 
+                {canSeed && (
                 <button
                   onClick={handleSeedDemo}
                   disabled={isSeedingDemo}
                   style={{
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#1F1B17',
                     border: '1.5px solid #D8D0C7',
                     borderRadius: '10px',
@@ -662,16 +522,18 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                   <FileText size={15} color="#1F1B17" />
                   <span>{isSeedingDemo ? 'Loading Demo...' : 'Load MovilVentas Benchmark Demo'}</span>
                 </button>
+                )}
               </div>
             </div>
           ) : (
             /* DATA TABLE (Enterprise Tabular UI) */
             <div style={{
-              background: '#FFFFFF',
-              borderRadius: '14px',
-              border: '1px solid #E6E1DB',
+              background: 'var(--surface, #FFFFFF)',
+              borderRadius: '20px',
+              border: 'none',
               overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+              padding: '8px 12px 12px',
+              boxShadow: '0 1px 2px rgba(31,27,23,.04), 0 8px 24px rgba(31,27,23,.05)'
             }}>
               <table className="goml-table" style={{ margin: 0 }}>
                 <thead>
@@ -686,7 +548,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                 </thead>
                 <tbody>
                   {filteredProjects.map(proj => (
-                    <tr key={proj.id} style={{ transition: 'background 0.12s ease' }}>
+                    <tr key={proj.id} style={{ transition: 'background 0.12s ease' }} onContextMenu={(e) => openMenu(e, proj)}>
                       {/* Initiative & Client */}
                       <td>
                         <div>
@@ -748,20 +610,20 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                       <td>
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                            <span style={{ color: proj.score >= 90 ? '#000000' : proj.score > 0 ? '#ED7D31' : '#71717A' }}>
+                            <span style={{ color: proj.score > 0 ? '#1F1B17' : '#71717A' }}>
                               {proj.score}% Score
                             </span>
                             <span style={{ color: '#71717A', fontWeight: 600 }}>
                               {proj.verified_items} / {proj.total_items}
                             </span>
                           </div>
-                          <div style={{ width: '100%', height: '5px', background: '#F4F4F5', borderRadius: '9999px', overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: '5px', background: 'var(--soft)', borderRadius: '9999px', overflow: 'hidden' }}>
                             <div
                               style={{
                                 width: `${proj.score}%`,
                                 height: '100%',
                                 borderRadius: '9999px',
-                                backgroundColor: proj.score >= 90 ? '#000000' : '#ED7D31'
+                                backgroundColor: '#1F1B17'
                               }}
                             />
                           </div>
@@ -796,11 +658,23 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                               cursor: 'pointer',
                               transition: 'background 0.15s ease'
                             }}
-                            onMouseOver={(e) => e.currentTarget.style.background = '#ED7D31'}
-                            onMouseOut={(e) => e.currentTarget.style.background = '#1F1B17'}
                             title="Open Initiative Workspace"
                           >
                             Workspace
+                          </button>
+
+                          <button
+                            type="button"
+                            className="row-more"
+                            aria-label={`More actions for ${proj.name}`}
+                            aria-haspopup="menu"
+                            title="More actions (or right-click the row)"
+                            onClick={(e) => {
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setCtx({ x: r.right - 4, y: r.bottom + 4, proj });
+                            }}
+                          >
+                            <MoreHorizontal size={16} />
                           </button>
 
                           {proj.score >= 90 && proj.critical_blockers === 0 && (
@@ -822,6 +696,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                             </button>
                           )}
 
+                          {canManage && (
                           <button
                             onClick={(e) => handleDeleteProject(proj.id, proj.name, e)}
                             style={{
@@ -835,12 +710,13 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                               alignItems: 'center',
                               justifyContent: 'center'
                             }}
-                            onMouseOver={(e) => e.currentTarget.style.color = '#DC2626'}
+                            onMouseOver={(e) => e.currentTarget.style.color = '#EA580C'}
                             onMouseOut={(e) => e.currentTarget.style.color = '#9A928A'}
                             title="Delete Initiative"
                           >
                             <Trash2 size={15} />
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -877,7 +753,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
             </div>
 
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               borderRadius: '14px',
               border: '1px solid #E6E1DB',
               overflow: 'hidden',
@@ -917,7 +793,7 @@ export const ExecutiveDashboard = ({ onOpenCopilot }) => {
                         <a
                           href={`#prereq/${esc.project_id}`}
                           style={{
-                            background: '#F5F1EC',
+                            background: 'var(--soft)',
                             color: '#575049',
                             border: '1px solid #E6E1DB',
                             borderRadius: '8px',

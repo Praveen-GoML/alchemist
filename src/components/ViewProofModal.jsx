@@ -1,69 +1,13 @@
 ﻿import React, { useState } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import {
   X, Check, Sparkles, ShieldCheck, FileText, Download,
   ExternalLink, Eye, Key, AlertTriangle, ArrowRight,
   Clock, CheckCircle, CheckCircle2, XCircle, Copy, Send,
-  User, Calendar, Layers, Lock, Image as ImageIcon, ZoomIn, RefreshCw
+  User, Calendar, Layers, Lock, Image as ImageIcon, ZoomIn, RefreshCw, Loader2
 } from 'lucide-react';
 import { API_URL, BASE_URL } from '../apiConfig';
-
-// Dynamic Handover Specification Generator
-const getDynamicTemplateForRequirement = (item) => {
-  if (!item) return {};
-  const name = (item.name || '').toLowerCase();
-  const desc = (item.description || '').toLowerCase();
-
-  // 1. Google Maps / Geolocation
-  if (name.includes('map') || name.includes('google') || name.includes('whitelist') || desc.includes('maps')) {
-    return {
-      endpoint: 'https://maps.googleapis.com/maps/api/ (Google Cloud Platform Console)',
-      authMethod: 'GCP API Key with IP Restrictions (Directions, Geocoding, Distance Matrix enabled)',
-      username: 'goml-maps-routing-svc@gcp-project.iam.gserviceaccount.com',
-      vaultRef: '[1Password / GCP Secret Manager: secret/google-maps-api-key]',
-      ingressIp: 'HTTP Referrers & Ingress IP: 34.120.45.10/32 (goML Egress NAT)',
-      envScope: 'Staging & Production Pilot (50k requests/day volume quota provisioned)',
-      notes: 'Verified Google Cloud billing active. API key restricted to server IPs and required Maps APIs to prevent unauthorized quota consumption.'
-    };
-  }
-
-  // 2. IAM / Role / AWS Bedrock
-  if (name.includes('bedrock') || name.includes('iam') || name.includes('role') || name.includes('arn')) {
-    return {
-      endpoint: 'arn:aws:iam::123456789012:role/GoMLBedrockExecutionRole',
-      authMethod: 'AWS Cross-Account STS AssumeRole with external ID',
-      username: 'arn:aws:iam::123456789012:user/goml-agent-orchestrator',
-      vaultRef: '[AWS Secrets Manager: arn:aws:secretsmanager:us-east-1:123456789012:secret:bedrock-sts-token]',
-      ingressIp: 'us-east-1 VPC Endpoint',
-      envScope: 'us-east-1 Bedrock Claude 3.5 Sonnet / Haiku (Full Model Access)',
-      notes: 'Cross-account trust relationship policy attached with bedrock:InvokeModel and bedrock:ListFoundationModels permissions.'
-    };
-  }
-
-  // 3. Database / SQL / MySQL
-  if (name.includes('sql') || name.includes('database') || name.includes('mysql')) {
-    return {
-      endpoint: 'https://api.internal.movilventas.net/staging',
-      authMethod: 'Read-Only Service Account / IAM TLS Enforced',
-      username: 'goml_staging_reader_ro',
-      vaultRef: '[AWS Secrets Manager: arn:aws:secretsmanager:us-east-1:...:secret/movilventas-rds-ro]',
-      ingressIp: '34.120.45.10/32 (goML Staging VPC NAT)',
-      envScope: 'Staging Sandbox / Read-Only Schema Map & Routing Validation',
-      notes: 'Connection test log showing successful query against MySQL. Zero unmasked PII accessible.'
-    };
-  }
-
-  // Fallback
-  return {
-    endpoint: 'https://api.internal.corp.com/v1',
-    authMethod: 'Service Account / OAuth2 TLS Enforced',
-    username: 'goml_service_account',
-    vaultRef: '[Stored in 1Password / AWS Secrets Manager]',
-    ingressIp: '34.120.45.10/32 (goML Staging VPC)',
-    envScope: 'Staging Sandbox (Read-Only)',
-    notes: 'Specification verified and tested.'
-  };
-};
+import { openSafe, safeUrl } from '../utils/safeUrl';
 
 export const ViewProofModal = ({
   isOpen = true,
@@ -73,8 +17,6 @@ export const ViewProofModal = ({
   onUpdated,
   onOpenRejectModal
 }) => {
-  if (!isOpen || !item) return null;
-
   const [isVerifying, setIsVerifying] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -84,6 +26,8 @@ export const ViewProofModal = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
+
+  if (!isOpen || !item) return null;
 
   // Parse structured handover specs from evidence_notes if available
   const parseNotes = (notes) => {
@@ -102,7 +46,6 @@ export const ViewProofModal = ({
   };
 
   const parsedSpecs = parseNotes(item.evidence_notes);
-  const template = getDynamicTemplateForRequirement(item);
 
   // Multi-file evidence parsing
   const evidenceFiles = item.evidence_file
@@ -123,25 +66,10 @@ export const ViewProofModal = ({
         url: fullUrl
       };
     })
-    : [
-      {
-        name: 'gcp-maps-ip-whitelist.png',
-        subtext: '1.4 MB • Uploaded 12 mins ago',
-        format: 'PNG',
-        isImage: true,
-        url: null
-      },
-      {
-        name: 'nat-eip-security-group-rules.pdf',
-        subtext: '480 KB • AWS VPC Route Tables',
-        format: 'PDF',
-        isImage: false,
-        url: null
-      }
-    ];
+    : [];
 
   const handleCopyMaskedKey = () => {
-    const keyToCopy = item.masked_api_key || parsedSpecs['Vault Reference'] || template.vaultRef || 'secret/movilventas-rds-ro';
+    const keyToCopy = item.masked_api_key || parsedSpecs['Vault Reference'];
     navigator.clipboard.writeText(keyToCopy);
     setCopiedKey(true);
     triggerToast('Copied credential vault reference to clipboard!');
@@ -179,13 +107,13 @@ export const ViewProofModal = ({
   const isDone = item.status === 'Verified';
 
   // Handover spec values
-  const endpointVal = parsedSpecs['Host/Endpoint'] || parsedSpecs['Host'] || item.evidence_url || template.endpoint;
-  const authVal = parsedSpecs['Auth Protocol'] || parsedSpecs['Auth'] || template.authMethod;
-  const userVal = parsedSpecs['User/Account'] || parsedSpecs['Username'] || template.username;
-  const vaultVal = item.masked_api_key || parsedSpecs['Vault Reference'] || template.vaultRef;
-  const ingressVal = parsedSpecs['Ingress Whitelist'] || template.ingressIp;
-  const scopeVal = parsedSpecs['Scope'] || template.envScope;
-  const signoffVal = parsedSpecs['Client Sign-off'] || project?.client_name || 'Client Technical Lead';
+  const endpointVal = parsedSpecs['Host/Endpoint'] || parsedSpecs['Host'] || item.evidence_url || 'Not provided';
+  const authVal = parsedSpecs['Auth Protocol'] || parsedSpecs['Auth'] || 'Not provided';
+  const userVal = parsedSpecs['User/Account'] || parsedSpecs['Username'] || 'Not provided';
+  const vaultVal = item.masked_api_key || parsedSpecs['Vault Reference'] || 'Not provided';
+  const ingressVal = parsedSpecs['Ingress Whitelist'] || 'Not provided';
+  const scopeVal = parsedSpecs['Scope'] || 'Not provided';
+  const signoffVal = parsedSpecs['Client Sign-off'] || project?.client_name || 'Not provided';
 
   return (
     <div
@@ -257,7 +185,7 @@ export const ViewProofModal = ({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           borderRadius: '16px',
           width: '96%',
           maxWidth: '1100px',
@@ -296,7 +224,7 @@ export const ViewProofModal = ({
             right: 22,
             zIndex: 3,
             color: '#000000',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: 'var(--surface)',
             borderRadius: '50%',
             width: 38,
             height: 38,
@@ -329,14 +257,14 @@ export const ViewProofModal = ({
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           flexShrink: 0
         }}>
           <div style={{ flex: 1, paddingRight: '2.5rem' }}>
             {/* Top Badges Row (Orange, Black & White Only - Zero Icon Clutter) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '10px', flexWrap: 'wrap' }}>
               <span style={{
-                background: '#FAF8F5',
+                background: 'var(--bg)',
                 border: '1.5px solid #E6E1DB',
                 color: '#1F1B17',
                 padding: '4px 14px',
@@ -349,7 +277,7 @@ export const ViewProofModal = ({
               </span>
 
               <span style={{
-                background: '#FAF8F5',
+                background: 'var(--bg)',
                 border: '1.5px solid #E6E1DB',
                 color: '#1F1B17',
                 padding: '4px 14px',
@@ -361,7 +289,7 @@ export const ViewProofModal = ({
               </span>
 
               <span style={{
-                background: '#FAF8F5',
+                background: 'var(--bg)',
                 border: '1.5px solid #E6E1DB',
                 color: '#1F1B17',
                 padding: '4px 14px',
@@ -435,12 +363,12 @@ export const ViewProofModal = ({
             display: 'flex',
             flexDirection: 'column',
             gap: '1.6rem',
-            background: '#FFFFFF'
+            background: 'var(--surface)'
           }}
         >
           {/* Card 1: REQUIRED PROOF / ARTIFACT (Material 3 Style) */}
           <div style={{
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             border: '2px solid #E6E1DB',
             borderLeft: '5px solid #ED7D31',
             borderRadius: '20px',
@@ -482,7 +410,7 @@ export const ViewProofModal = ({
 
           {/* Card 2: NON-TECHNICAL GUIDE BAR (Material 3 Style) */}
           <div style={{
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             border: '2px solid #E6E1DB',
             borderRadius: '20px',
             padding: '14px 22px',
@@ -513,7 +441,7 @@ export const ViewProofModal = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
                 type="button"
-                onClick={() => window.open(endpointVal || 'https://console.aws.amazon.com', '_blank')}
+                onClick={() => openSafe(endpointVal)}
                 style={{
                   background: '#1F1B17',
                   color: '#FFFFFF',
@@ -564,12 +492,15 @@ export const ViewProofModal = ({
             </div>
 
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '2px solid #E6E1DB',
               borderRadius: '20px',
               overflow: 'hidden',
               boxShadow: '0 4px 18px rgba(0,0,0,0.03)'
             }}>
+              {effectiveFiles.length === 0 && (
+                <div style={{ padding: '16px', fontSize: '13px', color: '#6E6862' }}>No evidence files provided.</div>
+              )}
               {effectiveFiles.map((f, idx) => (
                 <div
                   key={idx}
@@ -588,7 +519,7 @@ export const ViewProofModal = ({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '240px' }}>
                     <span style={{
-                      background: '#F5F1EC',
+                      background: 'var(--soft)',
                       border: '1.5px solid #D8D0C7',
                       color: '#475569',
                       fontSize: '11px',
@@ -628,7 +559,7 @@ export const ViewProofModal = ({
                         type="button"
                         onClick={() => setSelectedImage(f.url)}
                         style={{
-                          background: '#FFFFFF',
+                          background: 'var(--surface)',
                           border: '2px solid #E6E1DB',
                           borderRadius: '9999px',
                           padding: '6px 16px',
@@ -651,9 +582,9 @@ export const ViewProofModal = ({
 
                     {f.url && (
                       <a
-                        href={f.url}
+                        href={safeUrl(f.url) || undefined}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         style={{
                           background: '#1F1B17',
                           color: '#FFFFFF',
@@ -714,7 +645,7 @@ export const ViewProofModal = ({
             </div>
 
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '2px solid #E6E1DB',
               borderRadius: '20px',
               overflow: 'hidden',
@@ -722,7 +653,7 @@ export const ViewProofModal = ({
             }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
                 <thead>
-                  <tr style={{ background: '#FAF8F5', borderBottom: '2px solid #E6E1DB' }}>
+                  <tr style={{ background: 'var(--bg)', borderBottom: '2px solid #E6E1DB' }}>
                     <th style={{ padding: '12px 20px', textAlign: 'left', width: '28%', fontSize: '11.5px', fontWeight: 800, color: '#6E6862', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Specification Parameter
                     </th>
@@ -871,7 +802,7 @@ export const ViewProofModal = ({
             </div>
 
             <div style={{
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               border: '2px solid #E6E1DB',
               borderRadius: '20px',
               padding: '18px 24px',
@@ -879,7 +810,7 @@ export const ViewProofModal = ({
             }}>
               {item.verification_notes ? (
                 <div style={{
-                  background: '#FAF8F5',
+                  background: 'var(--bg)',
                   border: '1.5px solid #E6E1DB',
                   borderLeft: '4px solid #ED7D31',
                   borderRadius: '16px',
@@ -904,7 +835,7 @@ export const ViewProofModal = ({
         <div style={{
           padding: '1.25rem 3.25rem',
           borderTop: '2px solid #F5F1EC',
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -933,7 +864,7 @@ export const ViewProofModal = ({
               type="button"
               onClick={onClose}
               style={{
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 border: '2px solid #000000',
                 borderRadius: '9999px',
                 padding: '10px 28px',
@@ -965,7 +896,7 @@ export const ViewProofModal = ({
                   onOpenRejectModal(item);
                 }}
                 style={{
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   border: '2px solid #1F1B17',
                   borderRadius: '9999px',
@@ -994,7 +925,7 @@ export const ViewProofModal = ({
                 onClick={handleAiVerify}
                 disabled={isVerifying}
                 style={{
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#ED7D31',
                   border: '2px solid #ED7D31',
                   borderRadius: '9999px',
@@ -1093,7 +1024,7 @@ export const ViewProofModal = ({
                 position: 'absolute',
                 top: '-40px',
                 right: '0',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 border: 'none',
                 borderRadius: '50%',
                 width: '32px',

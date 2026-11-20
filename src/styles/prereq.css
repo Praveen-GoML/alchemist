@@ -677,3 +677,5 @@
   .prereq-context-body { flex-direction: column; }
   .prereq-context-body > div:first-child { width: auto !important; max-height: 200px; border-right: 0 !important; border-bottom: 1px solid var(--line); }
 }
+
+.animate-spin { animation: spin 1s linear infinite; }

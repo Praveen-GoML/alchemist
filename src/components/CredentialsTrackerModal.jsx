@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { X, Search, KeyRound, Check, Clock, ExternalLink, ShieldCheck, Link2, ArrowRight, Plus, Copy, Mail, Send, Loader2 } from 'lucide-react';
 import { API_URL } from '../apiConfig';
 import { looksLikeCredential } from '../utils/credentialGuide';

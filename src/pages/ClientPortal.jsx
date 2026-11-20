@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../api/client';
 import {
   CheckCircle2, Clock, Upload, ArrowLeft, ArrowRight,
   FileText, CheckCircle, Loader2, Building2, ShieldCheck,
@@ -326,6 +326,19 @@ export const ClientPortal = ({ projectId }) => {
     };
   }, [id]);
 
+  // Direct link to a single request: #client/<id>?item=<itemId> opens it; ?tab=credentials opens the tracker
+  useEffect(() => {
+    if (deepLinkDone.current || !checklist.length) return;
+    deepLinkDone.current = true;
+    const wanted = searchParams.get('item');
+    if (wanted) {
+      const hit = checklist.find((i) => String(i.id) === wanted);
+      if (hit) setSubmitModalItem(hit);
+    } else if (searchParams.get('tab') === 'credentials') {
+      setCredsOpen(true);
+    }
+  }, [checklist]);
+
   if (loading && !project) {
     return (
       <div style={{
@@ -369,9 +382,9 @@ export const ClientPortal = ({ projectId }) => {
 
   // Filter checklist tasks cleanly
   const filteredChecklist = checklist.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (item.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.description ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.category ?? '').toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
     if (filterTab === 'BLOCKERS') return item.is_critical && item.status !== 'Verified';
@@ -379,19 +392,6 @@ export const ClientPortal = ({ projectId }) => {
     if (filterTab === 'CLEARED') return item.status === 'Verified';
     return true;
   });
-
-  // Direct link to a single request: #client/<id>?item=<itemId> opens it; ?tab=credentials opens the tracker
-  useEffect(() => {
-    if (deepLinkDone.current || !checklist.length) return;
-    deepLinkDone.current = true;
-    const wanted = searchParams.get('item');
-    if (wanted) {
-      const hit = checklist.find((i) => String(i.id) === wanted);
-      if (hit) setSubmitModalItem(hit);
-    } else if (searchParams.get('tab') === 'credentials') {
-      setCredsOpen(true);
-    }
-  }, [checklist]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);

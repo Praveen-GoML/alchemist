@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { iso, today } from '../../utils/helpers';
+import { safeUrl } from '../../utils/safeUrl';
 import { useAuth } from '../../context/AuthContext';
 
+import { dialog } from '../../utils/dialog';
 export default function Links({ data, updateData }) {
   const { canManageLinks } = useAuth();
   const canEdit = canManageLinks();
@@ -10,7 +12,7 @@ export default function Links({ data, updateData }) {
 
   const addLink = e => {
     e.preventDefault();
-    if (!canEdit || !form.name.trim() || !form.url.trim()) return;
+    if (!canEdit || !form.name.trim() || !safeUrl(form.url)) return;
     updateData(prev => ({
       ...prev,
       links: [...prev.links, { name:form.name.trim(), url:form.url.trim(), note:form.note.trim() }]
@@ -18,8 +20,10 @@ export default function Links({ data, updateData }) {
     setForm({ name:'', url:'', note:'' });
   };
 
-  const removeLink = idx => {
+  const removeLink = async idx => {
     if (!canEdit) return;
+    const link = data.links?.[idx];
+    if (!(await dialog.confirm(`${link?.name || 'This link'} will be removed from the tracker links.`, { title: 'Remove this link?', variant: 'danger', confirmLabel: 'Remove' }))) return;
     updateData(prev => ({
       ...prev,
       links: prev.links.filter((_,i) => i !== idx)
@@ -43,13 +47,13 @@ export default function Links({ data, updateData }) {
     }
     const file = e.target.files[0];
     if (!file) return;
-    file.text().then(t => {
+    file.text().then(async t => {
       let o;
       try { o = JSON.parse(t); } catch { alert('That file isn\'t valid JSON.'); return; }
       if (!o || !Array.isArray(o.projects) || !Array.isArray(o.members)) {
         alert('That file isn\'t a Go Alchemists Hub export.'); return;
       }
-      if (!confirm(`Replace all data with ${file.name}?`)) return;
+      if (!(await dialog.confirm(`All current hub data will be replaced with the contents of ${file.name}.`, { title: 'Replace all data?', variant: 'danger', confirmLabel: 'Replace' }))) return;
       updateData(() => ({...o, prereqs:o.prereqs||[], prSeq:o.prSeq||0}));
     });
     e.target.value = '';
@@ -61,7 +65,7 @@ export default function Links({ data, updateData }) {
         <div style={{
           marginBottom: '1rem',
           padding: '10px 16px',
-          background: '#F9FAFB',
+          background: 'var(--soft)',
           border: '1px solid #E5E7EB',
           borderRadius: '8px',
           display: 'flex',
@@ -86,7 +90,7 @@ export default function Links({ data, updateData }) {
           {links.length ? links.map((l, i) => (
             <li key={i}>
               <div>
-                <a href={l.url} target="_blank" rel="noopener"><b>{l.name}</b></a>
+                <a href={safeUrl(l.url) || undefined} target="_blank" rel="noopener noreferrer"><b>{l.name}</b></a>
                 {l.note && <div className="small muted">{l.note}</div>}
                 <div className="small muted url">
                   {l.url.replace(/^https?:\/\//,'').slice(0,60)}{l.url.length>68?'…':''}

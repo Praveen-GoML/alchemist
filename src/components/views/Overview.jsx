@@ -1,7 +1,14 @@
+import { useAuth } from '../../context/AuthContext';
+import { useProjectScope } from '../../hooks/useProjectScope';
 import { parse, today, days, fmt, pct, slug, sym, uatDelay, clSummary, hygMembers, hygPct, mondayOf, iso, PSTAT } from '../../utils/helpers';
 
 export default function Overview({ data }) {
-  const { projects=[], improvements=[], members=[], hygiene={}, leave={}, checklist={}, clProjects=[], items=[] } = data;
+  const { user } = useAuth();
+  const { projects: allProjects=[], improvements=[], members=[], hygiene={}, leave={}, checklist={}, clProjects: allClProjects=[], items=[] } = data;
+  const { canSee } = useProjectScope(members);
+  // Members only see the projects they are involved in (Team > Project matrix)
+  const projects = allProjects.filter(p => canSee(p.name));
+  const clProjects = allClProjects.filter(n => canSee(n));
   const t = today();
 
   // Status counts
@@ -53,7 +60,7 @@ export default function Overview({ data }) {
   return (
     <div>
       <div className="greet">
-        <h2>Good to see you, Thasleema</h2>
+        <h2>Good to see you, {(user?.name || '').split(' ')[0] || 'there'}</h2>
       </div>
       <p className="hint">
         Every Go Alchemists tracker in one place. Today is{' '}
@@ -70,23 +77,44 @@ export default function Overview({ data }) {
             ) : null)}
           </div>
         </div>
-        <div className="ptable">
+        <div className="pgrid">
           {projects.map(p => {
             const u = p.rUatSign||p.pUatSign;
+            const ud = parse(u);
+            const left = ud ? days(t, ud) : null;
             const label = {
-              'On Schedule': 'On Track',
-              'Behind': 'Behind',
-              'Delayed': 'Delayed',
-              'Not Started': 'Not Started',
-              'Completed': 'Done'
+              'On Schedule': 'On track', 'Behind': 'Behind', 'Delayed': 'Delayed',
+              'Not Started': 'Not started', 'Completed': 'Done'
             }[p.status] || p.status;
+            const s0 = parse(p.start), e0 = parse(p.end);
+            let elapsed = null;
+            if (s0 && e0 && e0 > s0) elapsed = Math.max(0, Math.min(100, Math.round(((t - s0) / (e0 - s0)) * 100)));
+            if (p.status === 'Completed') elapsed = 100;
+            if (p.status === 'Not Started') elapsed = 0;
+            const rel = left === null ? 'Dates TBC'
+              : left < 0 ? `${-left}d past UAT sign-off`
+              : left === 0 ? 'UAT sign-off today'
+              : `${left}d to UAT sign-off`;
             return (
-              <a key={p.sno} className={`el st-${slug(p.status)}`} href="#projects" title={`${p.name} — ${p.status}`}>
-                <span className="num">{p.sno}</span>
-                <span className="epill">{label}</span>
-                <span className="sym">{sym(p.name)}</span>
-                <span className="ename">{p.name}</span>
-                <span className="emeta">{u ? 'UAT '+fmt(u) : 'Dates TBC'}</span>
+              <a key={p.sno} className={`pcard st-${slug(p.status)}`} href="#projects" title={`${p.name} — ${p.status}`}>
+                <div className="pc-top">
+                  <span className="pc-av" aria-hidden="true">{sym(p.name)}</span>
+                  <span className="pc-pill">{label}</span>
+                </div>
+                <div className="pc-name">{p.name}</div>
+                <div className="pc-sub">#{p.sno}{p.team ? ` · ${p.team}` : ''}{p.sub ? ` · ${p.sub}` : ''}</div>
+                {elapsed !== null && (
+                  <div className="pc-bar" role="progressbar" aria-valuenow={elapsed} aria-valuemin={0} aria-valuemax={100} aria-label="Timeline elapsed">
+                    <i style={{ width: elapsed + '%' }} />
+                  </div>
+                )}
+                <div className="pc-foot">
+                  <span className={left !== null && left < 0 && p.status !== 'Completed' ? 'pc-late' : ''}>
+                    {p.status === 'Completed' ? 'Completed' : rel}
+                  </span>
+                  {u && <span className="pc-date">{fmt(u)}</span>}
+                </div>
+                {p.blocker && <div className="pc-blk" title={p.blocker}>⚠ {p.blocker}</div>}
               </a>
             );
           })}

@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import { PlusCircle, X, Loader2 } from 'lucide-react';
 import { API_URL } from '../apiConfig';
 
@@ -76,7 +76,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
           width: '100%',
           maxWidth: '760px',
           maxHeight: '90vh',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--surface)',
           borderRadius: '16px',
           border: '1px solid #E6E1DB',
           boxShadow: '0 8px 32px rgba(30, 20, 10, .16), 0 2px 8px rgba(30, 20, 10, .08)',
@@ -114,7 +114,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
             right: 22,
             zIndex: 3,
             color: '#1F1B17',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: 'var(--surface)',
             borderRadius: '50%',
             width: 38,
             height: 38,
@@ -199,7 +199,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                   fontSize: '14.5px',
                   padding: '13px 16px',
                   boxSizing: 'border-box',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   fontFamily: 'inherit',
                   transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
@@ -231,7 +231,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                     fontSize: '14.5px',
                     padding: '13px 16px',
                     boxSizing: 'border-box',
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#1F1B17',
                     fontFamily: 'inherit',
                     cursor: 'pointer'
@@ -261,7 +261,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                     fontSize: '14.5px',
                     padding: '13px 16px',
                     boxSizing: 'border-box',
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#1F1B17',
                     fontFamily: 'inherit',
                     cursor: 'pointer'
@@ -296,7 +296,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                   lineHeight: 1.5,
                   padding: '13px 16px',
                   boxSizing: 'border-box',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   fontFamily: 'inherit',
                   transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
@@ -329,7 +329,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                     fontSize: '14px',
                     padding: '12px 16px',
                     boxSizing: 'border-box',
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#1F1B17',
                     fontFamily: 'inherit'
                   }}
@@ -390,7 +390,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                   fontSize: '14px',
                   padding: '13px 16px',
                   boxSizing: 'border-box',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#1F1B17',
                   fontFamily: 'inherit',
                   transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
@@ -427,7 +427,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                     border: '2px solid #D8D0C7',
                     padding: '8px 12px',
                     boxSizing: 'border-box',
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#1F1B17',
                     fontFamily: 'inherit'
                   }}
@@ -463,7 +463,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
           <div style={{
             padding: '1.25rem 2.5rem',
             borderTop: '1px solid #E6E1DB',
-            backgroundColor: '#FAF8F5',
+            backgroundColor: 'var(--bg)',
             display: 'flex',
             justifyContent: 'flex-end',
             alignItems: 'center',
@@ -478,7 +478,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
                 padding: '12px 28px',
                 fontSize: '14.5px',
                 fontWeight: 700,
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#575049',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'

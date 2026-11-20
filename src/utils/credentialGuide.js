@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '../api/client';
 import { API_URL } from '../apiConfig';
 const DYNAMIC_CACHE = {};
 

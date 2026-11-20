@@ -9,6 +9,7 @@ import { API_URL } from '../apiConfig';
 import { renderBrd } from './aiContextBuilder';
 
 export const CONTEXT_SECTIONS = [
+  { key: 'summary', label: 'Executive summary', hint: 'Readiness, what needs attention, next actions', on: true },
   { key: 'overview', label: 'Project overview', hint: 'Client, type, deployment, readiness', on: true },
   { key: 'requirements', label: 'Requirements', hint: 'REQ items with acceptance criteria', on: true },
   { key: 'prerequisites', label: 'Prerequisites', hint: 'Status, owner, evidence, why needed', on: true },
@@ -51,10 +52,63 @@ export function composeProjectContext(data, include) {
   );
   out.push(
     '## How to use this context\n' +
-      '- Treat the sections below as the source of truth about this project.\n' +
+      '- You are helping the delivery team get this project ready for kick-off. Treat the sections below as the source of truth.\n' +
       '- Do not assume anything marked "Not specified"; ask or flag it instead.\n' +
-      '- Unverified critical prerequisites are blockers: raise them in any plan you produce.'
+      '- Unverified critical prerequisites are blockers: raise them in any plan you produce.\n' +
+      '- Cite items by their IDs (PRE-001, REQ-001) so the team can find them in the tracker.\n' +
+      '- Keep answers short and actionable: who needs to do what, by when.'
   );
+
+  if (include.summary) {
+    const total = items.length;
+    const verified = items.filter((it) => isDone(it.status)).length;
+    const openCritical = items.filter((it) => it.is_critical && !isDone(it.status));
+    const pct = total ? Math.round((verified / total) * 100) : 0;
+    let kick = 'not set';
+    if (p.target_kickoff_date) {
+      const d = Math.round((new Date(p.target_kickoff_date) - new Date(new Date().toDateString())) / 864e5);
+      kick = Number.isFinite(d) ? `${p.target_kickoff_date} (${d >= 0 ? `in ${d} days` : `${-d} days ago`})` : String(p.target_kickoff_date);
+    }
+    // readiness by category, weakest first
+    const byCat = {};
+    items.forEach((it) => {
+      const c = val(it.category, 'General');
+      byCat[c] = byCat[c] || { total: 0, done: 0, critical: 0 };
+      byCat[c].total += 1;
+      if (isDone(it.status)) byCat[c].done += 1;
+      else if (it.is_critical) byCat[c].critical += 1;
+    });
+    const catRows = Object.entries(byCat)
+      .sort((x, y) => x[1].done / x[1].total - y[1].done / y[1].total)
+      .map(([c, v]) => `| ${c} | ${v.done}/${v.total} | ${Math.round((v.done / v.total) * 100)}% | ${v.critical} |`);
+    // next actions: open items, critical first, then earliest due date
+    const openItems = items
+      .map((it, i) => ({ it, id: `PRE-${String(i + 1).padStart(3, '0')}` }))
+      .filter(({ it }) => !isDone(it.status))
+      .sort((x, y) => (y.it.is_critical ? 1 : 0) - (x.it.is_critical ? 1 : 0) || String(x.it.due_date || '9999').localeCompare(String(y.it.due_date || '9999')))
+      .slice(0, 8);
+
+    const verdict = !total
+      ? 'No prerequisites tracked yet.'
+      : openCritical.length === 0
+        ? 'Ready: every critical prerequisite is verified.'
+        : `Not ready: ${openCritical.length} critical prerequisite${openCritical.length > 1 ? 's' : ''} still open.`;
+
+    out.push(
+      '## At a glance\n' +
+        `- **Readiness:** ${pct}% (${verified} of ${total} prerequisites verified)\n` +
+        `- **Critical blockers open:** ${openCritical.length}\n` +
+        `- **Target kick-off:** ${kick}\n` +
+        `- **Verdict:** ${verdict}\n\n` +
+        (catRows.length
+          ? '### Readiness by category (weakest first)\n| Category | Verified | Done | Critical open |\n|---|---|---|---|\n' + catRows.join('\n') + '\n\n'
+          : '') +
+        '### Do next\n' +
+        (openItems.length
+          ? openItems.map(({ it, id }) => `- ${id} **${val(it.name)}**${it.is_critical ? ' (critical)' : ''}: owner ${val(it.owner, 'unassigned')}, due ${val(it.due_date, 'not set')}`).join('\n')
+          : '_Nothing outstanding._')
+    );
+  }
 
   if (include.overview) {
     out.push(

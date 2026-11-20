@@ -547,7 +547,7 @@ export const WeeklyPlanner = ({
 
       {/* 1. TOP ENGAGEMENT SCOPE HERO CARD (Matches Screenshot) */}
       <section style={{
-        background: '#FFFFFF',
+        background: 'var(--surface)',
         borderRadius: '12px',
         border: '1px solid #E6E1DB',
         padding: '1.25rem 1.5rem',
@@ -574,7 +574,7 @@ export const WeeklyPlanner = ({
               color: '#6E6862',
               padding: '2px 8px',
               borderRadius: '4px',
-              background: '#FAF8F5',
+              background: 'var(--bg)',
               border: '1px solid #E6E1DB'
             }}>
               ENGAGEMENT SCOPE
@@ -583,7 +583,7 @@ export const WeeklyPlanner = ({
             {project.type && (
               <span style={{
                 fontSize: '11.5px', color: '#6E6862', fontWeight: 600, padding: '2px 8px',
-                borderRadius: '4px', background: '#FAF8F5', border: '1px solid #E6E1DB'
+                borderRadius: '4px', background: 'var(--bg)', border: '1px solid #E6E1DB'
               }}>
                 {project.type}
               </span>
@@ -594,7 +594,7 @@ export const WeeklyPlanner = ({
           <div style={{
             display: 'inline-flex',
             padding: '2px',
-            background: '#F5F1EC',
+            background: 'var(--soft)',
             borderRadius: '9999px',
             border: '1px solid #E6E1DB',
             gap: '2px'
@@ -752,7 +752,7 @@ export const WeeklyPlanner = ({
 
       {/* 2. INTERACTIVE PLANNING CANVAS / SPRINT ROADMAP & GOVERNANCE CARD */}
       <section style={{
-        background: '#FFFFFF',
+        background: 'var(--surface)',
         borderRadius: '12px',
         border: '1px solid #E6E1DB',
         padding: '1.25rem 1.5rem',
@@ -804,7 +804,7 @@ export const WeeklyPlanner = ({
                 gap: '6px',
                 padding: '6px 12px',
                 borderRadius: '6px',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#0D0F11',
                 border: '1px solid #E6E1DB',
                 fontSize: '11.5px',
@@ -825,7 +825,7 @@ export const WeeklyPlanner = ({
                 gap: '6px',
                 padding: '6px 12px',
                 borderRadius: '6px',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#0D0F11',
                 border: '1px solid #E6E1DB',
                 fontSize: '11.5px',
@@ -846,7 +846,7 @@ export const WeeklyPlanner = ({
                 gap: '6px',
                 padding: '6px 12px',
                 borderRadius: '6px',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#0D0F11',
                 border: '1px solid #E6E1DB',
                 fontSize: '11.5px',
@@ -889,7 +889,7 @@ export const WeeklyPlanner = ({
           flexWrap: 'wrap',
           gap: '10px',
           padding: '6px 10px',
-          background: '#FAF8F5',
+          background: 'var(--bg)',
           borderRadius: '6px',
           border: '1px solid #E6E1DB'
         }}>
@@ -927,7 +927,7 @@ export const WeeklyPlanner = ({
               type="button"
               onClick={() => handleOpenAddTaskModal(0)}
               style={{
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 color: '#475569',
                 border: '1px solid #E6E1DB',
                 borderRadius: '9999px',
@@ -948,7 +948,7 @@ export const WeeklyPlanner = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '4px',
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               color: '#0D0F11',
               border: '1px solid #E6E1DB',
               borderRadius: '9999px',
@@ -1063,7 +1063,7 @@ export const WeeklyPlanner = ({
                 fontSize: '11.5px',
                 borderRadius: '6px',
                 border: '1px solid #E6E1DB',
-                background: '#FFFFFF',
+                background: 'var(--surface)',
                 outline: 'none',
                 boxSizing: 'border-box'
               }}
@@ -1099,7 +1099,7 @@ export const WeeklyPlanner = ({
                   key={phase.id}
                   onClick={() => togglePhaseExpand(phase.id)}
                   style={{
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     borderRadius: '8px',
                     border: isWeek1 ? '1.5px solid #0D0F11' : '1px solid #E6E1DB',
                     padding: '8px 10px',
@@ -1150,7 +1150,7 @@ export const WeeklyPlanner = ({
                   </div>
 
                   {/* Bottom Line */}
-                  <div style={{ width: '100%', height: '2px', background: '#F5F1EC', borderRadius: '9999px', overflow: 'hidden', marginTop: '2px' }}>
+                  <div style={{ width: '100%', height: '2px', background: 'var(--soft)', borderRadius: '9999px', overflow: 'hidden', marginTop: '2px' }}>
                     <div style={{
                       width: `${Math.max(phase.progressPct, 0)}%`,
                       height: '100%',
@@ -1175,7 +1175,7 @@ export const WeeklyPlanner = ({
             <div
               key={phase.id}
               style={{
-                background: '#FAF8F5',
+                background: 'var(--bg)',
                 borderRadius: '8px',
                 border: '1px solid #E6E1DB',
                 overflow: 'hidden'
@@ -1210,7 +1210,7 @@ export const WeeklyPlanner = ({
                         color: '#475569',
                         padding: '1px 6px',
                         borderRadius: '4px',
-                        background: '#FFFFFF',
+                        background: 'var(--surface)',
                         border: '1px solid #E6E1DB'
                       }}>
                         Immediate Action
@@ -1277,7 +1277,7 @@ export const WeeklyPlanner = ({
               {isExpanded && (
                 <div style={{
                   padding: '8px 12px 12px 12px',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   borderTop: '1px solid #E6E1DB'
                 }}>
                   {phase.items.length === 0 ? (
@@ -1295,7 +1295,7 @@ export const WeeklyPlanner = ({
                         width: '28px',
                         height: '28px',
                         borderRadius: '50%',
-                        background: '#FAF8F5',
+                        background: 'var(--bg)',
                         border: '1px solid #E6E1DB',
                         display: 'flex',
                         alignItems: 'center',
@@ -1320,7 +1320,7 @@ export const WeeklyPlanner = ({
                           marginTop: '4px',
                           padding: '5px 12px',
                           borderRadius: '9999px',
-                          background: '#FFFFFF',
+                          background: 'var(--surface)',
                           border: '1px solid #D8D0C7',
                           fontSize: '11.5px',
                           fontWeight: 600,
@@ -1343,7 +1343,7 @@ export const WeeklyPlanner = ({
                           <div
                             key={item.id}
                             style={{
-                              background: '#FFFFFF',
+                              background: 'var(--surface)',
                               border: '1px solid #E6E1DB',
                               borderRadius: '8px',
                               padding: '10px 14px',
@@ -1394,7 +1394,7 @@ export const WeeklyPlanner = ({
                                     borderRadius: '4px',
                                     fontSize: '10px',
                                     fontWeight: 600,
-                                    background: '#F5F1EC',
+                                    background: 'var(--soft)',
                                     color: '#475569',
                                     border: '1px solid #E6E1DB'
                                   }}>
@@ -1471,7 +1471,7 @@ export const WeeklyPlanner = ({
                                     gap: '4px',
                                     padding: '4px 12px',
                                     borderRadius: '9999px',
-                                    background: '#FAF8F5',
+                                    background: 'var(--bg)',
                                     border: '1px solid #E6E1DB',
                                     fontSize: '11px',
                                     fontWeight: 700,
@@ -1553,7 +1553,7 @@ export const WeeklyPlanner = ({
           padding: '1.25rem'
         }}>
           <div style={{
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             borderRadius: '14px',
             width: '100%',
             maxWidth: '540px',
@@ -1580,7 +1580,7 @@ export const WeeklyPlanner = ({
               </button>
             </div>
 
-            <div style={{ background: '#FAF8F5', border: '1px solid #E6E1DB', borderRadius: '8px', padding: '10px 12px', fontSize: '12px', color: '#475569', lineHeight: 1.5 }}>
+            <div style={{ background: 'var(--bg)', border: '1px solid #E6E1DB', borderRadius: '8px', padding: '10px 12px', fontSize: '12px', color: '#475569', lineHeight: 1.5 }}>
               {guideModalItem.description || 'Follow standard cloud provisioning SOP to configure and hand over required credentials.'}
             </div>
 
@@ -1609,7 +1609,7 @@ export const WeeklyPlanner = ({
                 style={{
                   padding: '6px 14px',
                   borderRadius: '6px',
-                  background: '#F5F1EC',
+                  background: 'var(--soft)',
                   border: '1px solid #E6E1DB',
                   fontSize: '11.5px',
                   fontWeight: 600,
@@ -1658,7 +1658,7 @@ export const WeeklyPlanner = ({
           padding: '1.25rem'
         }}>
           <div style={{
-            background: '#FFFFFF',
+            background: 'var(--surface)',
             borderRadius: '18px',
             width: '100%',
             maxWidth: '560px',
@@ -1692,7 +1692,7 @@ export const WeeklyPlanner = ({
                 type="button"
                 onClick={() => setShowAddTaskModal(false)}
                 style={{
-                  background: '#FAF8F5',
+                  background: 'var(--bg)',
                   border: '1px solid #E6E1DB',
                   borderRadius: '50%',
                   width: '30px',
@@ -1730,7 +1730,7 @@ export const WeeklyPlanner = ({
                   <select
                     value={newTaskData.category}
                     onChange={(e) => setNewTaskData({ ...newTaskData, category: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D8D0C7', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box', background: '#FFFFFF' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D8D0C7', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box', background: 'var(--surface)' }}
                   >
                     <option value="Security">Security &amp; IAM</option>
                     <option value="Environment">Cloud &amp; Environment</option>
@@ -1803,7 +1803,7 @@ export const WeeklyPlanner = ({
                 style={{
                   padding: '7px 16px',
                   borderRadius: '6px',
-                  background: '#FAF8F5',
+                  background: 'var(--bg)',
                   border: '1px solid #E6E1DB',
                   fontSize: '12px',
                   fontWeight: 600,

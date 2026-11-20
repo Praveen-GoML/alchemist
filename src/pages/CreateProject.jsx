@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import axios from '../api/client';
 import lottie from 'lottie-web';
 import scanningAnimation from '../assets/scanning-animation.json';
 import {
@@ -83,7 +83,7 @@ const renderUploadedFileIcon = (file) => {
       width: '64px',
       height: '64px',
       borderRadius: '16px',
-      background: '#FAF8F5',
+      background: 'var(--bg)',
       border: '1.5px solid #E6E1DB',
       display: 'flex',
       alignItems: 'center',
@@ -209,13 +209,6 @@ export const CreateProject = () => {
   const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  // Material UI Groq API Key Modal State
-  const [showGroqModal, setShowGroqModal] = useState(false);
-  const [groqApiKey, setGroqApiKey] = useState(() => {
-    return localStorage.getItem('groq_api_key') || '';
-  });
-  const [groqKeyError, setGroqKeyError] = useState('');
-  const [showKeyPassword, setShowKeyPassword] = useState(false);
 
   // Fetch dynamic template options from API
   useEffect(() => {
@@ -303,8 +296,8 @@ export const CreateProject = () => {
     }
   };
 
-  const handleOpenGroqModal = (e) => {
-    e.preventDefault();
+  const handleAnalyze = async (e) => {
+    e?.preventDefault?.();
     if (!file && !sowText.trim()) {
       setSowError('Please upload any project document, slide deck, spreadsheet, or paste Statement of Work text.');
       return;
@@ -312,30 +305,10 @@ export const CreateProject = () => {
     setSowError('');
     setSowErrorDetail('');
     setShowErrorDetail(false);
-    setGroqKeyError('');
-    setShowGroqModal(true);
+    await executeAnalyzeSOW();
   };
 
-  const handleConfirmGroqAnalysis = async () => {
-    const key = groqApiKey.trim();
-    if (!key) {
-      setGroqKeyError('Please provide your Gemini API key to proceed.');
-      return;
-    }
-    if (key.startsWith('gsk_')) {
-      setGroqKeyError('That looks like a Groq key. Please paste a Gemini API key from Google AI Studio.');
-      return;
-    }
-
-    try {
-      localStorage.setItem('groq_api_key', key);
-    } catch (_) { }
-
-    setShowGroqModal(false);
-    await executeAnalyzeSOW(key);
-  };
-
-  const executeAnalyzeSOW = async (apiKey) => {
+  const executeAnalyzeSOW = async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -359,24 +332,17 @@ export const CreateProject = () => {
         if (!controller.signal.aborted) setSowStatus('Generating tailored prerequisites across Data, Env, Compliance & People...');
       }, 2400);
 
-      const headers = apiKey ? { 'X-Groq-Api-Key': apiKey } : {};
       let res;
       if (file) {
         const formData = new FormData();
         formData.append('file', file);
-        if (apiKey) {
-          formData.append('groq_api_key', apiKey);
-        }
         res = await axios.post(`${API_URL}/analyze-sow-file`, formData, {
-          headers,
           signal: controller.signal
         });
       } else {
         res = await axios.post(`${API_URL}/analyze-sow`, {
           content: sowText,
-          groq_api_key: apiKey || undefined
         }, {
-          headers,
           signal: controller.signal
         });
       }
@@ -409,7 +375,7 @@ export const CreateProject = () => {
       const isTechnicalDump = /Gemini models failed|Groq models failed|rate-limited|rate limit|truncated at max_tokens|json_validate_failed|Error code: 400|Traceback/i.test(rawDetail);
 
       const friendlyMsg = isTechnicalDump
-        ? "We couldn't complete the full analysis for this proposal. This can occur when Gemini API quota limits are reached or the document requires more processing tokens. Please verify your Gemini API key or try a shorter section."
+        ? "We couldn't complete the full analysis for this proposal. This can occur when Gemini API quota limits are reached or the document requires more processing tokens. Please try a shorter section, or ask an admin to check the AI service key on the server."
         : (rawDetail || (err.response?.status === 422
           ? 'The uploaded proposal format is not readable. Try a standard text PDF, DOCX, or plain text file.'
           : (err.response?.status === 503
@@ -429,7 +395,7 @@ export const CreateProject = () => {
     return (
       <div style={{
         minHeight: 'calc(100vh - 68px)',
-        background: '#FFFFFF',
+        background: 'var(--surface)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -581,7 +547,7 @@ export const CreateProject = () => {
               padding: '12px 36px',
               borderRadius: '9999px',
               border: '2px solid #000000',
-              background: '#FFFFFF',
+              background: 'var(--surface)',
               color: '#000000',
               fontSize: '15px',
               fontWeight: 800,
@@ -615,7 +581,7 @@ export const CreateProject = () => {
   return (
     <div style={{
       minHeight: 'calc(100vh - 68px)',
-      background: '#FAF8F5',
+      background: 'var(--bg)',
       padding: '3rem 2rem 5rem 2rem',
       display: 'flex',
       flexDirection: 'column',
@@ -652,7 +618,7 @@ export const CreateProject = () => {
       <div style={{
         display: 'inline-flex',
         alignItems: 'center',
-        background: '#FAF8F5',
+        background: 'var(--bg)',
         border: '2px solid #E6E1DB',
         padding: '7px',
         borderRadius: '9999px',
@@ -716,7 +682,7 @@ export const CreateProject = () => {
           alignItems: 'center',
           textAlign: 'center'
         }}>
-          <form onSubmit={handleOpenGroqModal} style={{ width: '100%' }}>
+          <form onSubmit={handleAnalyze} style={{ width: '100%' }}>
             {/* Header */}
             <div style={{ marginBottom: '2rem' }}>
 
@@ -765,13 +731,13 @@ export const CreateProject = () => {
             {file ? (
               <div
                 style={{
-                  border: '2px solid #D8D0C7',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '20px',
+                  border: 'none',
+                  backgroundColor: 'var(--surface)',
+                  borderRadius: '24px',
                   padding: '2.5rem 2rem',
                   textAlign: 'center',
                   marginBottom: '2rem',
-                  boxShadow: '0 4px 18px rgba(0, 0, 0, 0.05)',
+                  boxShadow: '0 1px 2px rgba(31,27,23,.04), 0 10px 30px rgba(31,27,23,.07)',
                   position: 'relative'
                 }}
               >
@@ -800,9 +766,9 @@ export const CreateProject = () => {
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
                       style={{
-                        background: '#FFF1F2',
+                        background: 'color-mix(in srgb, #E11D48 10%, var(--surface))',
                         color: '#E11D48',
-                        border: '1.5px solid #FECDD3',
+                        border: 'none',
                         borderRadius: '9999px',
                         padding: '8px 22px',
                         fontSize: '13.5px',
@@ -831,9 +797,9 @@ export const CreateProject = () => {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       style={{
-                        background: '#F5F1EC',
-                        color: '#575049',
-                        border: '1.5px solid #D8D0C7',
+                        background: 'var(--soft)',
+                        color: 'var(--ink)',
+                        border: 'none',
                         borderRadius: '9999px',
                         padding: '8px 22px',
                         fontSize: '13.5px',
@@ -864,7 +830,7 @@ export const CreateProject = () => {
                 onMouseLeave={() => setIsDropzoneHovered(false)}
                 style={{
                   border: isDropzoneHovered ? '2.5px dashed #ED7D31' : '2px dashed #FDBA74',
-                  backgroundColor: isDropzoneHovered ? '#FFFDF9' : '#FAFAFC',
+                  backgroundColor: isDropzoneHovered ? 'var(--accent-soft)' : 'var(--soft)',
                   borderRadius: '20px',
                   padding: '3.25rem 2.25rem',
                   textAlign: 'center',
@@ -938,23 +904,24 @@ export const CreateProject = () => {
                 }}
                 style={{
                   width: '100%',
-                  borderRadius: '16px',
-                  border: '2px solid #D8D0C7',
-                  fontSize: '16.5px',
-                  lineHeight: 1.55,
+                  borderRadius: '18px',
+                  border: 'none',
+                  fontSize: '16px',
+                  lineHeight: 1.6,
                   boxSizing: 'border-box',
-                  background: '#FFFFFF',
+                  background: 'var(--soft)',
+                  color: 'var(--ink)',
                   padding: '18px 22px',
-                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)',
+                  boxShadow: 'none',
                   fontFamily: 'inherit',
                   transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#ED7D31';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(237,125,49,0.18)';
+                  e.currentTarget.style.background = 'var(--surface)';
+                  e.currentTarget.style.boxShadow = '0 0 0 2px #ED7D31, 0 8px 24px rgba(31,27,23,.08)';
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#D8D0C7';
+                  e.currentTarget.style.background = 'var(--soft)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               />
@@ -1010,35 +977,9 @@ export const CreateProject = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
-                          onClick={() => {
-                            setGroqKeyError('');
-                            setShowGroqModal(true);
-                          }}
+                          onClick={handleAnalyze}
                           style={{
-                            background: '#FEF7F0',
-                            color: '#C2410C',
-                            border: '1px solid #FDBA74',
-                            borderRadius: '9999px',
-                            padding: '6px 16px',
-                            fontSize: '13px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            transition: 'all 0.15s ease'
-                          }}
-                          onMouseOver={(e) => { e.currentTarget.style.background = '#FED7AA'; }}
-                          onMouseOut={(e) => { e.currentTarget.style.background = '#FEF7F0'; }}
-                        >
-                          <Key size={14} /> Update Gemini Key
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleOpenGroqModal}
-                          style={{
-                            background: '#F5F1EC',
+                            background: 'var(--soft)',
                             color: '#575049',
                             border: '1px solid #D8D0C7',
                             borderRadius: '9999px',
@@ -1084,7 +1025,7 @@ export const CreateProject = () => {
                         <div style={{
                           marginTop: '12px',
                           padding: '10px 14px',
-                          background: '#FAF8F5',
+                          background: 'var(--bg)',
                           borderRadius: '8px',
                           border: '1px solid #E6E1DB',
                           fontFamily: 'monospace',
@@ -1139,7 +1080,7 @@ export const CreateProject = () => {
                     fontWeight: 700,
                     borderRadius: '9999px',
                     border: '2px solid #D8D0C7',
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     color: '#475569',
                     cursor: sowLoading ? 'not-allowed' : 'pointer',
                     display: 'inline-flex',
@@ -1215,390 +1156,6 @@ export const CreateProject = () => {
             </div>
           </form>
 
-          {/* Centered dialog: Gemini API key */}
-          <Dialog
-            open={showGroqModal}
-            onClose={() => setShowGroqModal(false)}
-            keepMounted
-            maxWidth="sm"
-            fullWidth
-            PaperProps={{
-              sx: {
-                borderRadius: '16px',
-                backgroundColor: '#FFFFFF',
-                boxShadow: '0 8px 32px rgba(30, 20, 10, .16), 0 2px 8px rgba(30, 20, 10, .08)',
-                border: '1px solid #E6E1DB',
-                overflow: 'hidden',
-                position: 'relative',
-                fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif'
-              }
-            }}
-            slotProps={{
-              backdrop: {
-                sx: {
-                  backgroundColor: 'rgba(31, 27, 23, 0.55)',
-                  backdropFilter: 'blur(3px)'
-                }
-              }
-            }}
-          >
-            {/* Ambient Orange Glow in Dialog Header */}
-            <Box sx={{
-              position: 'absolute',
-              top: '-60px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: '600px',
-              height: '180px',
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(237, 125, 49, 0.24) 0%, transparent 70%)',
-              pointerEvents: 'none',
-              zIndex: 0
-            }} />
-
-            {/* High-Contrast Close Button at Top Right */}
-            <IconButton
-              onClick={() => setShowGroqModal(false)}
-              size="small"
-              sx={{
-                position: 'absolute',
-                top: 12,
-                right: 14,
-                zIndex: 3,
-                color: '#000000',
-                backgroundColor: '#FFFFFF',
-                borderRadius: '50%',
-                width: 32,
-                height: 32,
-                border: '1px solid #E6E1DB',
-                transition: 'all 0.18s ease',
-                '&:hover': {
-                  backgroundColor: '#000000',
-                  color: '#FFFFFF',
-                  transform: 'scale(1.05)'
-                }
-              }}
-            >
-              <X size={18} strokeWidth={2.5} />
-            </IconButton>
-
-            <DialogTitle sx={{
-              pt: '20px',
-              pb: '6px',
-              px: { xs: '20px', sm: '40px' },
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              position: 'relative',
-              zIndex: 1
-            }}>
-              {/* Top Circular Key Badge (Black container, Orange border & Key) */}
-              <Box sx={{
-                width: 48,
-                height: 48,
-                borderRadius: '12px',
-                backgroundColor: '#FDEEE2',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ED7D31',
-                mb: '12px',
-                border: '1px solid #F5D9BE'
-              }}>
-                <Key size={22} strokeWidth={2} />
-              </Box>
-
-              <Typography sx={{
-                fontFamily: '"Plus Jakarta Sans", "Outfit", sans-serif',
-                fontSize: '1.25rem',
-                fontWeight: 650,
-                color: '#1F1B17',
-                letterSpacing: '-0.03em',
-                lineHeight: 1.25,
-                mb: '4px'
-              }}>
-                Gemini API Key Required
-              </Typography>
-
-              <Typography sx={{
-                fontFamily: '"Plus Jakarta Sans", sans-serif',
-                fontSize: '0.875rem',
-                color: '#ED7D31',
-                fontWeight: 800,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase'
-              }}>
-                Real-Time AI Inference Engine
-              </Typography>
-            </DialogTitle>
-
-            <DialogContent sx={{
-              px: { xs: '20px', sm: '44px' },
-              pt: '4px',
-              pb: '16px',
-              position: 'relative',
-              zIndex: 1
-            }}>
-              <Typography sx={{
-                fontFamily: '"Plus Jakarta Sans", sans-serif',
-                fontSize: { xs: '0.925rem', sm: '0.975rem' },
-                color: '#000000',
-                lineHeight: 1.55,
-                mb: '20px',
-                fontWeight: 600,
-                textAlign: 'center',
-                maxWidth: '720px',
-                mx: 'auto'
-              }}>
-                Please provide your Gemini API key (free from Google AI Studio) to analyze the proposal and generate your kickoff architecture and Day-1 Readiness Matrix.
-              </Typography>
-
-              <Box sx={{ maxWidth: '760px', mx: 'auto', mb: '16px' }}>
-                <Box sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  mb: '6px',
-                  px: '16px'
-                }}>
-                  <Typography sx={{
-                    fontFamily: '"Plus Jakarta Sans", sans-serif',
-                    fontSize: '11.5px',
-                    fontWeight: 900,
-                    color: '#000000',
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}>
-                    <Key size={13} color="#ED7D31" strokeWidth={2.5} />
-                    <span>Gemini API Key</span>
-                  </Typography>
-                  <Typography sx={{
-                    fontFamily: '"JetBrains Mono", monospace',
-                    fontSize: '11.5px',
-                    color: '#000000',
-                    fontWeight: 700,
-                    opacity: 0.6
-                  }}>
-                    AQ.Ab8RN… / AIza…
-                  </Typography>
-                </Box>
-
-                {/* Pill-Shaped Text Box in Black & Orange */}
-                <TextField
-                  fullWidth
-                  autoFocus
-                  variant="outlined"
-                  type={showKeyPassword ? 'text' : 'password'}
-                  placeholder="Paste your Gemini API key here"
-                  value={groqApiKey}
-                  onChange={(e) => {
-                    setGroqApiKey(e.target.value);
-                    setGroqKeyError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleConfirmGroqAnalysis();
-                    }
-                  }}
-                  error={!!groqKeyError}
-                  helperText={groqKeyError}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Box sx={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: '9999px',
-                          backgroundColor: '#000000',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          ml: '4px',
-                          mr: '6px'
-                        }}>
-                          <Key size={16} color="#ED7D31" strokeWidth={2.5} />
-                        </Box>
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setShowKeyPassword(!showKeyPassword)}
-                          edge="end"
-                          size="small"
-                          sx={{ color: '#000000', mr: '8px', '&:hover': { color: '#ED7D31' } }}
-                        >
-                          {showKeyPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                    sx: {
-                      borderRadius: '9999px !important',
-                      fontSize: '15px',
-                      fontFamily: '"JetBrains Mono", monospace',
-                      backgroundColor: '#FFFFFF',
-                      height: '56px',
-                      transition: 'all 0.18s ease',
-                      '& input': {
-                        padding: '15px 14px',
-                        color: '#000000',
-                        fontWeight: 600,
-                        letterSpacing: '0.04em'
-                      },
-                      '& fieldset': {
-                        borderRadius: '9999px !important',
-                        borderColor: '#000000',
-                        borderWidth: '2px',
-                        transition: 'all 0.18s ease'
-                      },
-                      '&:hover fieldset': {
-                        borderColor: '#ED7D31'
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: '#ED7D31',
-                        borderWidth: '2.5px',
-                        boxShadow: '0 0 0 4px rgba(237, 125, 49, 0.22)'
-                      }
-                    }
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '9999px !important',
-                      '& fieldset': {
-                        borderRadius: '9999px !important'
-                      }
-                    }
-                  }}
-                />
-              </Box>
-
-              {/* Security Strip with No Border (Clean Session Indicator) */}
-              <Box sx={{
-                maxWidth: '760px',
-                mx: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '8px',
-                backgroundColor: 'transparent',
-                border: 'none',
-                py: '6px',
-                px: '8px'
-              }}>
-                <Box sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: '"Plus Jakarta Sans", sans-serif',
-                  fontSize: '12.5px',
-                  color: '#475569',
-                  fontWeight: 700
-                }}>
-                  <ShieldCheck size={16} color="#000000" strokeWidth={2.4} />
-                  <span>Key stored in session memory only</span>
-                </Box>
-                <a
-                  href="https://aistudio.google.com/apikey"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontFamily: '"Plus Jakarta Sans", sans-serif',
-                    fontSize: '12.5px',
-                    fontWeight: 800,
-                    color: '#FFFFFF',
-                    textDecoration: 'none',
-                    padding: '6px 16px',
-                    borderRadius: '9999px',
-                    backgroundColor: '#ED7D31',
-                    transition: 'all 0.18s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#000000';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ED7D31';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <span>Get Free Key</span>
-                  <ExternalLink size={13} strokeWidth={2.4} />
-                </a>
-              </Box>
-            </DialogContent>
-
-            <DialogActions sx={{
-              px: { xs: '20px', sm: '32px' },
-              pt: '10px',
-              pb: { xs: '32px', sm: '38px' },
-              gap: '12px',
-              justifyContent: 'center',
-              position: 'relative',
-              zIndex: 1
-            }}>
-              <Button
-                onClick={() => setShowGroqModal(false)}
-                sx={{
-                  fontFamily: '"Plus Jakarta Sans", sans-serif',
-                  borderRadius: '9999px',
-                  height: '48px',
-                  padding: '0 32px',
-                  fontSize: '14.5px',
-                  fontWeight: 800,
-                  color: '#000000',
-                  backgroundColor: '#FFFFFF',
-                  border: '2px solid #000000',
-                  textTransform: 'none',
-                  transition: 'all 0.18s ease',
-                  '&:hover': {
-                    backgroundColor: '#000000',
-                    color: '#FFFFFF',
-                    transform: 'translateY(-1px)'
-                  }
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleConfirmGroqAnalysis}
-                variant="contained"
-                sx={{
-                  fontFamily: '"Plus Jakarta Sans", "Outfit", sans-serif',
-                  borderRadius: '9999px',
-                  height: '48px',
-                  padding: '0 38px',
-                  fontSize: '15px',
-                  fontWeight: 900,
-                  background: 'linear-gradient(135deg, #ED7D31 0%, #EA580C 100%)',
-                  color: '#FFFFFF',
-                  boxShadow: '0 6px 20px rgba(237, 125, 49, 0.4)',
-                  textTransform: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  border: 'none',
-                  transition: 'all 0.18s ease',
-                  '&:hover': {
-                    background: '#000000',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
-                    transform: 'translateY(-1.5px)'
-                  }
-                }}
-              >
-                <span>Confirm & Run Gemini AI</span>
-                <ArrowRight size={17} strokeWidth={2.5} />
-              </Button>
-            </DialogActions>
-          </Dialog>
 
         </div>
       )}
@@ -1625,7 +1182,7 @@ export const CreateProject = () => {
                   onChange={(e) => setName(e.target.value)}
                   required
                   style={{
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     border: '2px solid #D8D0C7',
                     borderRadius: '16px',
                     fontSize: '17.5px',
@@ -1648,7 +1205,7 @@ export const CreateProject = () => {
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   style={{
-                    background: '#FFFFFF',
+                    background: 'var(--surface)',
                     border: '2px solid #D8D0C7',
                     borderRadius: '16px',
                     fontSize: '17.5px',
@@ -1696,7 +1253,7 @@ export const CreateProject = () => {
                     value={customProjectType}
                     onChange={(e) => setCustomProjectType(e.target.value)}
                     required={isCustomType}
-                    style={{ background: '#FFFFFF', border: '2px solid #D8D0C7', borderRadius: '14px', fontSize: '17px', padding: '16px 20px', height: '56px', boxSizing: 'border-box' }}
+                    style={{ background: 'var(--surface)', border: '2px solid #D8D0C7', borderRadius: '14px', fontSize: '17px', padding: '16px 20px', height: '56px', boxSizing: 'border-box' }}
                   />
                 </div>
               ) : (
@@ -1776,7 +1333,7 @@ export const CreateProject = () => {
                     placeholder="Enter custom industry"
                     value={customIndustry}
                     onChange={(e) => setCustomIndustry(e.target.value)}
-                    style={{ background: '#FFFFFF', border: '2px solid #D8D0C7', borderRadius: '16px', fontSize: '16.5px', padding: '16px 20px', height: '58px', boxSizing: 'border-box' }}
+                    style={{ background: 'var(--surface)', border: '2px solid #D8D0C7', borderRadius: '16px', fontSize: '16.5px', padding: '16px 20px', height: '58px', boxSizing: 'border-box' }}
                   />
                 ) : (
                   <MaterialSelect
@@ -1808,7 +1365,7 @@ export const CreateProject = () => {
                     placeholder="e.g. On-Prem OpenShift & AWS"
                     value={customDeployment}
                     onChange={(e) => setCustomDeployment(e.target.value)}
-                    style={{ background: '#FFFFFF', border: '2px solid #D8D0C7', borderRadius: '16px', fontSize: '16.5px', padding: '16px 20px', height: '58px', boxSizing: 'border-box' }}
+                    style={{ background: 'var(--surface)', border: '2px solid #D8D0C7', borderRadius: '16px', fontSize: '16.5px', padding: '16px 20px', height: '58px', boxSizing: 'border-box' }}
                   />
                 ) : (
                   <MaterialSelect
@@ -1848,7 +1405,7 @@ export const CreateProject = () => {
                   fontWeight: 700,
                   borderRadius: '9999px',
                   border: '2px solid #D8D0C7',
-                  background: '#FFFFFF',
+                  background: 'var(--surface)',
                   color: '#475569',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',

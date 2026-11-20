@@ -1,16 +1,19 @@
 import { iso, ym, pad, parse, today, hygMembers } from '../../utils/helpers';
 import { useAuth } from '../../context/AuthContext';
 
+import { queueLeaveNotice, cancelLeaveNotice } from '../../services/notifications';
 const LEAVE = [
-  ['CL','Casual leave'],['SL','Sick leave'],['EL','Earned leave'],['CO','Comp off'],
-  ['FL','Floater'],['MWB','Mental well-being'],['LOP','Loss of pay'],['BRV','Bereavement'],
+  ['CL','Casual leave'],['EL','Earned leave'],['CO','Comp off'],
+  ['MWB','Mental well-being'],['LOP','Loss of pay'],['BRV','Bereavement'],
   ['MAR','Marriage'],['SAB','Sabbatical'],['HOL','Holiday']
 ];
 
 export default function Leave({ data, updateData, ui, setUi }) {
   const { user, canEditLeave, isOwnMember, isManagementUser } = useAuth();
   const { leave={}, members=[] } = data;
-  const { leaveMonth, brush='CL' } = ui;
+  const { leaveMonth } = ui;
+  // A saved selection of a removed type (Sick / Floater) falls back to Casual leave
+  const brush = LEAVE.some(([c]) => c === ui.brush) ? ui.brush : 'CL';
   const set = patch => setUi(prev => ({...prev,...patch}));
 
   const [y, m] = leaveMonth.split('-').map(Number);
@@ -31,6 +34,13 @@ export default function Leave({ data, updateData, ui, setUi }) {
     if (!canEditLeave(memberName, memberEmail)) {
       alert(`You can only mark your own leave.`);
       return;
+    }
+    // Tell the PMs and TLs when someone applies for leave (several clicks become one message)
+    const clearing = (leave[memberName] || {})[dateKey] === brush;
+    if (clearing) {
+      cancelLeaveNotice(dateKey);
+    } else if (brush !== 'HOL') {
+      queueLeaveNotice({ who: user?.name || memberName, label: (LEAVE.find(([c]) => c === brush) || [, 'leave'])[1], date: dateKey });
     }
     updateData(prev => {
       const lv = {...prev.leave};
@@ -103,9 +113,9 @@ export default function Leave({ data, updateData, ui, setUi }) {
       {/* Brush selector card */}
       <div className="leave-brush-card">
         <div className="leave-brush-title">
-          <span>🎨 Select Leave Type To Apply</span>
+          <span>Leave type</span>
           <span style={{ fontWeight: 500, textTransform: 'none', fontSize: '12px' }}>
-            Tap any cell in your row to apply or clear
+            Pick a type, then tap any day in your row to apply or clear
           </span>
         </div>
         <div className="leave-brush-strip" role="radiogroup" aria-label="Leave type to apply">
@@ -119,8 +129,9 @@ export default function Leave({ data, updateData, ui, setUi }) {
                 className={`lb lv-${code.toLowerCase()}${isSelected ? ' on' : ''}`}
                 onClick={() => set({ brush: code })}
                 title={`${label} (${code})`}>
-                <b>{code}</b>
-                <span>{label}</span>
+                <i className="lb-dot" aria-hidden="true" />
+                <span className="lb-name">{label}</span>
+                <b className="lb-code">{code}</b>
               </button>
             );
           })}
@@ -129,31 +140,33 @@ export default function Leave({ data, updateData, ui, setUi }) {
 
       {/* Calendar table card */}
       <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="ch" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', background: 'var(--surface)' }}>
+        <div className="ch" style={{ padding: '20px 24px 8px' }}>
           <h2 style={{ fontSize: '15px' }}>{monthLabel} — Team Attendance Calendar</h2>
           <span className="small" style={{ color: 'var(--muted)' }}>
             Weekends shaded · Blue border denotes today
           </span>
         </div>
-        <div className="scroll">
+        <div className="lv-wrap">
           <table className="tbl lv">
             <thead>
               <tr>
-                <th className="sticky">Team Member</th>
+                <th className="sticky">
+                  <div className="lv-nav">
+                    <button type="button" onClick={prevMonth} aria-label="Previous month">‹</button>
+                    <span>{new Date(y, m-1, 1).toLocaleDateString('en-GB', {month:'short', year:'numeric'})}</span>
+                    <button type="button" onClick={nextMonth} aria-label="Next month">›</button>
+                  </div>
+                </th>
                 {cols.map(c => {
                   const we = c.w === 0 || c.w === 6;
                   const isTd = c.k === t;
                   return (
                     <th key={c.k} className={`c${we ? ' we' : ''}${isTd ? ' td' : ''}`} title={`${c.k}`}>
-                      <span style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase' }}>
-                        {'SMTWTFS'[c.w]}
-                      </span>
-                      <br />
-                      <span style={{ fontSize: '12px', fontWeight: isTd ? 800 : 600 }}>{c.d}</span>
+                      <span className="lv-dow">{['Su','Mo','Tu','We','Th','Fr','Sa'][c.w]}</span>
+                      <i className="lv-dot" />
                     </th>
                   );
                 })}
-                <th className="r" style={{ padding: '8px 14px', minWidth: '60px' }}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -166,8 +179,9 @@ export default function Leave({ data, updateData, ui, setUi }) {
                 return (
                   <tr key={member.name} className={isMe ? 'is-me' : ''}>
                     <td className="sticky">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: isMe ? 700 : 500, color: 'var(--ink)' }}>{member.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className="lv-av" aria-hidden="true">{(member.name || '?')[0].toUpperCase()}</span>
+                        <span className="lv-name" title={member.name} style={{ fontWeight: isMe ? 700 : 500, color: 'var(--ink)' }}>{member.name}</span>
                         {isMe && (
                           <span style={{
                             fontSize: '10px',
@@ -184,28 +198,29 @@ export default function Leave({ data, updateData, ui, setUi }) {
                         )}
                       </div>
                     </td>
-                    {cols.map(c => {
+                    {cols.map((c, ci) => {
                       const v = L[c.k] || '';
                       const we = c.w === 0 || c.w === 6;
                       const isTd = c.k === t;
+                      const off = we && !v;
+                      const prevC = ci > 0 ? cols[ci - 1] : null;
+                      const nextC = ci < cols.length - 1 ? cols[ci + 1] : null;
+                      const joined = (o) => o && (v ? L[o.k] : we && (o.w === 0 || o.w === 6) && !L[o.k]);
+                      const band = (v || off) ? `${joined(prevC) ? ' band-l' : ''}${joined(nextC) ? ' band-r' : ''} ${v ? 'has-leave' : 'is-off'}` : '';
                       return (
-                        <td key={c.k} className={`lc${we ? ' we' : ''}${isTd ? ' td' : ''}`}>
+                        <td key={c.k} className={`lc${we ? ' we' : ''}${isTd ? ' td' : ''} ${band}`}>
                           <button
                             className={`lcell${v ? ' lv-' + v.toLowerCase() : ''}`}
+                            disabled={off}
                             onClick={() => toggleCell(member.name, member.email, c.k)}
-                            style={!canEditRow ? { cursor: 'not-allowed', opacity: v ? 0.85 : 0.25 } : {}}
-                            title={canEditRow ? `Click to mark/clear leave for ${member.name} on ${c.k}` : `Read-only for ${member.name}`}
-                            aria-label={`${member.name} ${c.k}: ${v || 'working'}`}>
-                            {v || ''}
+                            style={!canEditRow ? { cursor: 'not-allowed' } : {}}
+                            title={off ? 'Weekly off' : canEditRow ? `${v ? 'Clear' : 'Mark'} leave for ${member.name} on ${c.k}${v ? ' (' + v + ')' : ''}` : `Read-only for ${member.name}`}
+                            aria-label={`${member.name} ${c.k}: ${v || (off ? 'weekly off' : 'working')}`}>
+                            {c.d}
                           </button>
                         </td>
                       );
                     })}
-                    <td className="r" style={{ padding: '8px 14px' }}>
-                      <span className={`leave-count-pill${monthCount > 0 ? ' has-leave' : ''}`}>
-                        {monthCount}
-                      </span>
-                    </td>
                   </tr>
                 );
               })}
@@ -214,20 +229,6 @@ export default function Leave({ data, updateData, ui, setUi }) {
         </div>
       </section>
 
-      {/* Modern Legend Bar */}
-      <div className="leave-legend-bar">
-        <span style={{ fontWeight: 700, color: 'var(--muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Legend:
-        </span>
-        {LEAVE.map(([code, label]) => (
-          <div key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <span className={`lcell lv-${code.toLowerCase()}`} style={{ width: 22, height: 22, fontSize: '9px', pointerEvents: 'none' }}>
-              {code}
-            </span>
-            <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

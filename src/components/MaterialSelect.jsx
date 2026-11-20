@@ -48,7 +48,7 @@ export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'S
         style={{
           width: '100%',
           height: '58px',
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           border: isOpen ? '2px solid #ED7D31' : '2px solid #D8D0C7',
           borderRadius: '16px',
           padding: '0 20px',
@@ -95,7 +95,7 @@ export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'S
           top: 'calc(100% + 8px)',
           left: 0,
           right: 0,
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           borderRadius: '18px',
           border: '1.5px solid #FDEEE2',
           boxShadow: '0 20px 40px -10px rgba(31, 27, 23, 0.2), 0 0 0 1px rgba(237, 125, 49, 0.1)',

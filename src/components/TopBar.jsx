@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, LogOut } from 'lucide-react';
 import Icon from './Icon';
 import { currentTheme, toggleTheme } from '../utils/theme';
 import { useAuth } from '../context/AuthContext';
 
+import { dialog } from '../utils/dialog';
+import NotificationBell from './NotificationBell';
 const VIEW_TITLES = {
   overview:     'Home',
   projects:     'Projects',
@@ -14,15 +16,15 @@ const VIEW_TITLES = {
   team:         'Team',
   improvements: 'Hub Improvements',
   links:        'Tracker Links',
-  playbook:     'Playbook',
+  docs:         'Docs & Drive',
 };
 
 export default function TopBar({ view, onMenuClick, onExpandSidebar, isCollapsed }) {
   const { user, logout, isManagementUser, activePortal, togglePortal } = useAuth();
   const [theme, setThemeState] = useState(() => currentTheme());
 
-  const handleLogout = () => {
-    if (confirm('Are you sure you want to logout?')) {
+  const handleLogout = async () => {
+    if (await dialog.confirm('You will need to sign in again to continue.', { title: 'Log out?', variant: 'question', confirmLabel: 'Log out' })) {
       logout();
     }
   };
@@ -86,44 +88,15 @@ export default function TopBar({ view, onMenuClick, onExpandSidebar, isCollapsed
       </button>
 
       <div className="who">
-        <Icon name="bell" className="bell" />
+        <NotificationBell />
+        <span className="who-sep" aria-hidden="true" />
         <span className="av" title={user?.email}>{user ? getInitials(user.name) : 'U'}</span>
-        <span className="wn">{user?.name || 'User'}</span>
-        <span style={{
-          fontSize: '11px',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          padding: '2px 6px',
-          borderRadius: '4px',
-          background: isManagementUser ? '#FEF3C7' : '#E5E7EB',
-          color: isManagementUser ? '#92400E' : '#4B5563',
-          marginLeft: '4px'
-        }}>
-          {user?.role || 'member'}
+        <span className="who-text">
+          <span className="wn">{user?.name || 'User'}</span>
+          <span className={`who-role${isManagementUser ? ' mgmt' : ''}`}>{user?.role || 'member'}</span>
         </span>
-        <button
-          onClick={handleLogout}
-          style={{
-            marginLeft: '12px',
-            padding: '6px 12px',
-            background: '#FEE2E2',
-            color: '#DC2626',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = '#FCA5A5';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = '#FEE2E2';
-          }}
-          title="Logout"
-        >
-          Logout
+        <button type="button" className="who-logout" onClick={handleLogout} title="Log out" aria-label="Log out">
+          <LogOut size={16} />
         </button>
       </div>
     </header>

@@ -92,7 +92,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
         onClick={e => e.stopPropagation()}
         style={{
           width: 'min(960px, 96vw)', height: '86vh',
-          background: '#FFFFFF', borderRadius: '16px',
+          background: 'var(--surface)', borderRadius: '16px',
           boxShadow: '0 32px 80px rgba(31,27,23,0.35)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden'
         }}
@@ -137,7 +137,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
             style={{
               width: '34px', height: '34px', flexShrink: 0,
               borderRadius: '50%', border: '1px solid #E6E1DB',
-              background: '#FFFFFF', color: '#6E6862', cursor: 'pointer',
+              background: 'var(--surface)', color: '#6E6862', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.15s'
             }}
@@ -153,7 +153,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
           <div style={{
             flexShrink: 0, padding: '10px 24px',
             display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-            background: '#FAF8F5', borderBottom: '1px solid #E6E1DB'
+            background: 'var(--bg)', borderBottom: '1px solid #E6E1DB'
           }}>
             {[
               { icon: <Layers size={13} />, label: `${meta.sections} sections` },
@@ -164,7 +164,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
               <span key={i} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '5px 12px', borderRadius: '9999px',
-                background: '#F5F1EC', border: '1px solid #E6E1DB',
+                background: 'var(--soft)', border: '1px solid #E6E1DB',
                 fontSize: '11.5px', fontWeight: 700, color: '#575049'
               }}>
                 {chip.icon}{chip.label}
@@ -174,7 +174,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
         )}
 
         {/* ── Body ── */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#FFFFFF' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--surface)' }}>
           {loading ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
               <Loader2 size={34} color="#F28C28" style={{ animation: 'spin 1s linear infinite' }} />
@@ -219,7 +219,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
         {!loading && !error && (
           <div style={{
             flexShrink: 0, padding: '14px 24px',
-            background: '#FAF8F5', borderTop: '1px solid #E6E1DB',
+            background: 'var(--bg)', borderTop: '1px solid #E6E1DB',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'
           }}>
             <span style={{ fontSize: '12px', color: '#9A928A', fontWeight: 600 }}>
@@ -231,7 +231,7 @@ export const AIBundleModal = ({ projectId, projectName, onClose }) => {
                 onClick={triggerDownload}
                 style={{
                   height: '40px', padding: '0 20px', borderRadius: '9999px',
-                  background: '#FFFFFF', color: '#1F1B17',
+                  background: 'var(--surface)', color: '#1F1B17',
                   border: '1.5px solid #E6E1DB', fontSize: '13px', fontWeight: 700,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px',
                   transition: 'all 0.15s'
