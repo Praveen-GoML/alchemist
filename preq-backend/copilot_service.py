@@ -67,9 +67,8 @@ def resolve_provider_key(api_key: str | None = None) -> tuple[str, str]:
     effective_key = (api_key or "").strip() or GEMINI_API_KEY or GROQ_API_KEY or ""
     if not effective_key:
         raise RuntimeError(
-            "AI provider API key is not configured. Paste your Gemini API key "
-            "(Google AI Studio) from the project creation screen, or set "
-            "GEMINI_API_KEY in the backend environment."
+            "The AI service key is not configured on the server. "
+            "Set GEMINI_API_KEY in the preq-backend environment (.env) and restart it."
         )
     provider = "groq" if effective_key.startswith("gsk_") else "gemini"
     return provider, effective_key
@@ -342,7 +341,7 @@ REQUIREMENTS AND CHECKLIST
 - OWNER RESOLUTION: If the source explicitly names a person or role, use that exact owner.
   If it does not name an individual but the prerequisite clearly requires a client action
   (providing access/data, decisions, business inputs, UAT, approval), set owner to
-  "Client (role to confirm)". If the item is exclusively a goML delivery-team action, set
+  "Client". If the item is exclusively a goML delivery-team action, set
   owner to "goML Delivery Team". If neither party can be determined from the source, use
   "Needs assignment". Never invent a person's name or a specific role not supported by the source.
 - Give requirements unique IDs REQ-001, REQ-002, etc. when the source supports requirements.

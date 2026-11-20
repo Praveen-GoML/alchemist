@@ -1,16 +1,18 @@
 import os
 import shutil
 import time
-from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
+from sqlalchemy import func
 from typing import List
 
+import dropbox_storage
 from database import engine, get_db
-from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement
+from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification
 from schemas import *
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
@@ -456,34 +458,157 @@ async def delete_improvement(improvement_id: int, db: Session = Depends(get_db))
     return {"message": "Improvement deleted"}
 
 # ══════════════════════════════════════════════════════════════════════════════
+# NOTIFICATIONS (in-app, delivered per person by email)
+# ══════════════════════════════════════════════════════════════════════════════
+
+NOTIFY_KINDS = {"leave", "assignment", "info"}
+NOTIFY_ROLES = {"pm", "tl", "admin"}          # roles that can be addressed as a group
+MANAGER_ROLES = {"admin", "pm", "tl"}         # who may notify named people directly
+MAX_RECIPIENTS = 50
+
+
+@app.get("/notifications")
+def list_notifications(
+    limit: int = 40,
+    unread_only: bool = False,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The signed-in user's notifications, newest first, plus the unread count."""
+    email = current_user.email.lower()
+    q = db.query(Notification).filter(func.lower(Notification.recipient_email) == email)
+    unread = q.filter(Notification.read_at.is_(None)).count()
+    if unread_only:
+        q = q.filter(Notification.read_at.is_(None))
+    rows = q.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(max(1, min(limit, 100))).all()
+    return {"unread": unread, "items": [NotificationOut.model_validate(r) for r in rows]}
+
+
+@app.post("/notifications")
+def create_notifications(
+    payload: NotificationCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Notify named people and/or everyone holding a role. The sender is never notified."""
+    kind = payload.kind if payload.kind in NOTIFY_KINDS else "info"
+    title = payload.title.strip()[:200]
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required.")
+    actor_role = (current_user.role or "").lower()
+
+    roles = {r.lower() for r in payload.roles}
+    if not roles <= NOTIFY_ROLES:
+        raise HTTPException(status_code=400, detail="Unsupported role.")
+    emails = {e.strip().lower() for e in payload.recipients if e and "@" in e}
+    # Regular members can only notify the managers (e.g. "I applied for leave"), never named colleagues.
+    if actor_role not in MANAGER_ROLES and emails:
+        raise HTTPException(status_code=403, detail="Only PMs, TLs and admins can notify specific people.")
+
+    if roles:
+        for (email,) in db.query(User.email).filter(User.is_active == True, func.lower(User.role).in_(roles)):  # noqa: E712
+            emails.add(email.lower())
+    emails.discard(current_user.email.lower())
+    if len(emails) > MAX_RECIPIENTS:
+        raise HTTPException(status_code=400, detail="Too many recipients.")
+
+    for email in emails:
+        db.add(Notification(
+            recipient_email=email, kind=kind, title=title,
+            body=(payload.body or "").strip()[:1000], link=(payload.link or "")[:200],
+            actor_name=current_user.name, actor_email=current_user.email,
+        ))
+    db.commit()
+    return {"created": len(emails)}
+
+
+@app.post("/notifications/read")
+def mark_notifications_read(
+    payload: NotificationRead,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Notification).filter(
+        func.lower(Notification.recipient_email) == current_user.email.lower(),
+        Notification.read_at.is_(None),
+    )
+    if not payload.all:
+        if not payload.ids:
+            return {"updated": 0}
+        q = q.filter(Notification.id.in_(payload.ids))
+    n = q.update({Notification.read_at: datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+    return {"updated": n}
+
+
+@app.delete("/notifications/{notification_id}")
+def delete_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(Notification).filter(
+        Notification.id == notification_id,
+        func.lower(Notification.recipient_email) == current_user.email.lower(),
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification not found.")
+    db.delete(row)
+    db.commit()
+    return {"message": "Deleted"}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FILE UPLOAD ENDPOINT (Zero Keys, Zero CORS Errors)
 # ══════════════════════════════════════════════════════════════════════════════
 
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+ALLOWED_UPLOAD_EXT = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx",
+    ".txt", ".md", ".png", ".jpg", ".jpeg", ".zip",
+}
+
+
+@app.get("/upload/status")
+async def upload_status(current_user: User = Depends(get_current_active_user)):
+    """Tells the UI where files will be stored."""
+    return {"storage": "dropbox" if dropbox_storage.is_configured() else "local", "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024)}
+
+
 @app.post("/upload")
-async def upload_file(request: Request, file: UploadFile = File(...)):
-    try:
-        # Sanitize filename
-        safe_name = os.path.basename(file.filename or "uploaded_doc")
-        clean_name = f"{int(time.time() * 1000)}_{safe_name}"
-        destination = os.path.join(UPLOAD_DIR, clean_name)
-        
-        with open(destination, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        file_size = os.path.getsize(destination)
-        # Build URL
-        base_url = str(request.base_url).rstrip("/")
-        file_url = f"{base_url}/uploads/{clean_name}"
-        
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    project: str = Form("General"),
+    current_user: User = Depends(require_pm_or_above),
+):
+    safe_name = os.path.basename(file.filename or "uploaded_doc")
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        raise HTTPException(status_code=400, detail=f"File type {ext or '(none)'} is not allowed.")
+
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+
+    if dropbox_storage.is_configured():
+        try:
+            stored = dropbox_storage.upload(project, safe_name, data)
+        except dropbox_storage.DropboxError as e:
+            raise HTTPException(status_code=502, detail=str(e))
         return {
-            "success": True,
-            "filename": safe_name,
-            "size": file_size,
-            "url": file_url,
-            "path": f"/uploads/{clean_name}"
+            "success": True, "filename": safe_name, "size": len(data),
+            "url": stored["url"], "path": stored["path"], "storage": "dropbox",
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    # No Dropbox configured: keep the file on the server disk (dev only; not durable on serverless hosts)
+    clean_name = f"{int(time.time() * 1000)}_{safe_name}"
+    with open(os.path.join(UPLOAD_DIR, clean_name), "wb") as buffer:
+        buffer.write(data)
+    base_url = str(request.base_url).rstrip("/")
+    return {
+        "success": True, "filename": safe_name, "size": len(data),
+        "url": f"{base_url}/uploads/{clean_name}", "path": f"/uploads/{clean_name}", "storage": "local",
+    }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HEALTH CHECK

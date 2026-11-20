@@ -207,3 +207,29 @@ class ImprovementResponse(ImprovementBase):
 
     class Config:
         from_attributes = True
+
+
+class NotificationCreate(BaseModel):
+    recipients: List[str] = []   # emails
+    roles: List[str] = []        # e.g. ["pm", "tl"]; resolved to every active user with that role
+    kind: str = "info"
+    title: str
+    body: str = ""
+    link: str = ""
+
+class NotificationOut(BaseModel):
+    id: int
+    kind: str
+    title: str
+    body: str
+    link: str
+    actor_name: str
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class NotificationRead(BaseModel):
+    ids: List[int] = []
+    all: bool = False

@@ -115,3 +115,19 @@ class Improvement(Base):
     remarks = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Notification(Base):
+    """In-app notification for one person (matched by email)."""
+    __tablename__ = "alchemist_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_email = Column(String, index=True, nullable=False)
+    kind = Column(String, default="info")  # 'leave', 'assignment', 'info'
+    title = Column(String, nullable=False)
+    body = Column(Text, default="")
+    link = Column(String, default="")
+    actor_name = Column(String, default="")
+    actor_email = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    read_at = Column(DateTime, nullable=True)
