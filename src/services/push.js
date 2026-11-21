@@ -1,6 +1,5 @@
 import api from '../api/client';
 import { AUTH_API_URL } from '../apiConfig';
-import { playSound } from '../utils/sound';
 
 /** Device notifications (Web Push): a notification on the phone or computer even when the app is closed. */
 
@@ -33,7 +32,6 @@ export function registerServiceWorker() {
   // tapping a notification while the app is open: jump to the right page
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type === 'navigate' && e.data.hash) window.location.hash = e.data.hash;
-    if (e.data?.type === 'chime') playSound('notify');
   });
 }
 

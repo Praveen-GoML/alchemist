@@ -3,7 +3,6 @@ import { iso, ym, pad, parse, today, hygMembers } from '../../utils/helpers';
 import { useAuth } from '../../context/AuthContext';
 
 import { notifyLeaveSubmitted } from '../../services/notifications';
-import { playSound } from '../../utils/sound';
 import LeaveSubmitModal from '../LeaveSubmitModal';
 const LEAVE = [
   ['CL','Casual leave'],['EL','Earned leave'],['CO','Comp off'],
@@ -72,7 +71,6 @@ export default function Leave({ data, updateData, ui, setUi }) {
       return { ...prev, leave: lv };
     });
     notifyLeaveSubmitted({ who: user?.name || myName, adds, removes });
-    playSound('success');
     setDraft({});
     setReviewing(false);
     setSaving(false);

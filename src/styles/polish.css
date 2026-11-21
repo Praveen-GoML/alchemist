@@ -2040,8 +2040,46 @@ body.collapsed .sbadge, .app.collapsed .sbadge { position: absolute; top: 4px; r
 .dc-title { overflow-wrap: anywhere; }
 
 
-/* ── Notification sound switch ── */
-.npanel-headbtns { display: inline-flex; align-items: center; gap: 6px; }
-.npanel-snd { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--soft); color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
-.npanel-snd.on { color: var(--accent-text, var(--accent)); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
-.npanel-snd:hover { filter: brightness(.97); }
+/* ── Notification panel, redesigned ── */
+.npanel { width: min(420px, calc(100vw - 24px)); max-height: min(600px, calc(100vh - 88px)); border-radius: 22px; padding: 0; overflow: hidden; transform-origin: top right; animation: np-in .18s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes np-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+.npanel-head { align-items: center; padding: 16px 16px 10px 20px; }
+.npanel-head h3 { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; }
+.np-count { min-width: 22px; height: 22px; padding: 0 7px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--accent); color: #fff; font-style: normal; font-size: 11.5px; font-weight: 800; }
+.npanel-link { padding: 7px 10px; border-radius: 10px; }
+
+.npanel-tabs { align-self: stretch; margin: 0; padding: 0 20px; gap: 22px; border-radius: 0; background: transparent; border-bottom: 1px solid var(--line); }
+.npanel-tabs button { padding: 8px 0 11px; border-radius: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.npanel-tabs button.on { background: transparent; box-shadow: none; color: var(--ink); border-bottom-color: var(--accent); }
+.npanel-tabs button span { min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 6px; font-size: 10.5px; }
+
+.nlist { padding: 4px 8px 10px; }
+.ngroup { list-style: none; padding: 14px 12px 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.nitem { border-radius: 16px; transition: background .12s; }
+.nitem + .nitem { margin-top: 0; }
+.nitem.unread { background: transparent; }
+.nitem:hover { background: var(--soft); }
+.nitem-main { position: relative; gap: 14px; padding: 12px 14px 12px 22px; }
+.ndot { position: absolute; left: 8px; top: 50%; right: auto; transform: translateY(-50%); width: 8px; height: 8px; }
+.nico { width: 40px; height: 40px; border-radius: 50%; }
+.ntext { flex: 1; gap: 3px; padding-right: 54px; }
+.ntext b { font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nitem:not(.unread) .ntext b { font-weight: 600; color: color-mix(in srgb, var(--ink) 78%, var(--muted)); }
+.ntext span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ntext small { margin-top: 3px; font-size: 11.5px; }
+.ntime { position: absolute; right: 14px; top: 13px; font-size: 11.5px; color: var(--muted); white-space: nowrap; transition: opacity .12s; }
+.nitem.unread .ntime { color: var(--accent-text, var(--accent)); font-weight: 700; }
+.nitem:hover .ntime { opacity: 0; }
+.nitem-x { right: 10px; top: 9px; }
+
+.npanel-device { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--soft) 55%, var(--surface)); }
+.npd-row { padding: 6px 4px; background: transparent; gap: 12px; }
+.npd-row.on { background: transparent; }
+.npd-ico { width: 34px; height: 34px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.npd-row.on .npd-ico { background: color-mix(in srgb, #3DA56A 16%, var(--surface)); }
+.npd-actions { flex-direction: row; }
+.npd-text small { font-size: 11.5px; }
+.nempty { padding: 44px 28px 40px; }
+@media (max-width: 700px) { .npanel { border-radius: 20px; } }
+.nitem-main { padding-top: 10px; padding-bottom: 10px; }
+.ntime { top: 11px; }

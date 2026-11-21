@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing, Volume2, VolumeX } from 'lucide-react';
+import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { AUTH_API_URL } from '../apiConfig';
-import { playSound, soundEnabled, setSoundEnabled } from '../utils/sound';
 import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed, sendTestNotification } from '../services/push';
 
 const KIND = {
@@ -28,7 +27,6 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('all');
   const [toast, setToast] = useState(null);
-  const [soundOn, setSoundOn] = useState(soundEnabled);
   // device notifications (Web Push)
   const support = pushSupport();
   const [perm, setPerm] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'denied'));
@@ -44,7 +42,6 @@ export default function NotificationBell() {
 
   const onNew = useCallback((fresh) => {
     const n = fresh[0];
-    playSound('notify');
     setToast(fresh.length > 1 ? { title: `${fresh.length} new notifications`, body: n.title } : { title: n.title, body: n.body });
     setTimeout(() => setToast(null), 6000);
     // desktop alert when the tab is in the background
@@ -131,6 +128,18 @@ export default function NotificationBell() {
   };
 
   const shown = tab === 'unread' ? items.filter(n => !n.read_at) : items;
+  const dayLabel = (iso) => {
+    const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z'); const now = new Date();
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day(now) - day(d)) / 86400000);
+    return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : 'Earlier';
+  };
+  const groups = [];
+  shown.forEach(n => {
+    const label = dayLabel(n.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(n); else groups.push({ label, items: [n] });
+  });
 
   return (
     <>
@@ -151,17 +160,8 @@ export default function NotificationBell() {
       {open && createPortal(
         <div ref={panelRef} className="npanel" role="dialog" aria-label="Notifications" style={{ top: pos.top, right: pos.right }}>
           <div className="npanel-head">
-            <div>
-              <h3>Notifications</h3>
-              <span>{unread ? `${unread} unread` : 'You are all caught up'}</span>
-            </div>
-            <span className="npanel-headbtns">
-              <button type="button" className={`npanel-snd${soundOn ? ' on' : ''}`} aria-pressed={soundOn} title={soundOn ? 'Sound on: click to mute' : 'Sound off: click to turn on'}
-                onClick={() => { const next = !soundOn; setSoundOn(next); setSoundEnabled(next); if (next) playSound('notify', { force: true }); }}>
-                {soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
-              </button>
-              <button type="button" className="npanel-link" onClick={readAll} disabled={!unread}><Check size={14} /> Mark all read</button>
-            </span>
+            <h3>Notifications{unread > 0 && <em className="np-count">{unread}</em>}</h3>
+            <button type="button" className="npanel-link" onClick={readAll} disabled={!unread}><Check size={14} /> Mark all read</button>
           </div>
 
           <div className="npanel-tabs" role="tablist">
@@ -183,23 +183,29 @@ export default function NotificationBell() {
                 <span>{tab === 'unread' ? 'New activity will show up here.' : 'You will hear about leave requests, project assignments and more.'}</span>
               </li>
             )}
-            {shown.map(n => {
-              const k = KIND[n.kind] || KIND.info;
-              return (
-                <li key={n.id} className={`nitem${n.read_at ? '' : ' unread'}`}>
-                  <button type="button" className="nitem-main" onClick={() => go(n)}>
-                    <span className={`nico ${k.tone}`}><k.Icon size={17} /></span>
-                    <span className="ntext">
-                      <b>{n.title}</b>
-                      {n.body && <span>{n.body}</span>}
-                      <small>{ago(n.created_at)}{n.actor_name ? ` · ${n.actor_name}` : ''}</small>
-                    </span>
-                    {!n.read_at && <i className="ndot" aria-label="Unread" />}
-                  </button>
-                  <button type="button" className="nitem-x" aria-label="Dismiss notification" title="Dismiss" onClick={() => remove(n.id)}><X size={14} /></button>
-                </li>
-              );
-            })}
+            {groups.map(g => (
+              <React.Fragment key={g.label}>
+                <li className="ngroup">{g.label}</li>
+                {g.items.map(n => {
+                  const k = KIND[n.kind] || KIND.info;
+                  return (
+                    <li key={n.id} className={`nitem${n.read_at ? '' : ' unread'}`}>
+                      <button type="button" className="nitem-main" onClick={() => go(n)}>
+                        {!n.read_at && <i className="ndot" aria-label="Unread" />}
+                        <span className={`nico ${k.tone}`}><k.Icon size={17} /></span>
+                        <span className="ntext">
+                          <b>{n.title}</b>
+                          {n.body && <span>{n.body}</span>}
+                          <small>{n.actor_name && n.actor_name !== 'Alchemist' ? `From ${n.actor_name}` : 'Alchemist'}</small>
+                        </span>
+                        <time className="ntime">{ago(n.created_at)}</time>
+                      </button>
+                      <button type="button" className="nitem-x" aria-label="Dismiss notification" title="Dismiss" onClick={() => remove(n.id)}><X size={14} /></button>
+                    </li>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </ul>
 
           <div className="npanel-device">
@@ -213,16 +219,6 @@ export default function NotificationBell() {
                 </span>
               </div>
             ) : null}
-            {deviceOn && /android/i.test(navigator.userAgent) && (
-              <div className="npd-row snd">
-                <span className="npd-ico"><Volume2 size={16} /></span>
-                <span className="npd-text">
-                  <b>Use the Alchemist sound on this phone</b>
-                  <small>Save the sound, then open Settings, Apps, Alchemist, Notifications, Sound and pick it.</small>
-                </span>
-                <a className="npd-btn" href="/sounds/alchemist-notification.wav" download="Alchemist.wav">Save sound</a>
-              </div>
-            )}
             {!deviceOn && (support.ok ? (
               perm === 'denied' ? (
                 <div className="npd-row"><span className="npd-ico"><BellRing size={16} /></span><span className="npd-text"><b>Blocked in your browser</b><small>Allow notifications for this site in the browser settings, then come back.</small></span></div>
