@@ -6,13 +6,19 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data ? event.data.text() : '' }; }
   const title = data.title || 'Alchemist';
+  const origin = self.location.origin;
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/badge-72.png',
+      // absolute URLs + version so the phone always fetches the current artwork
+      icon: origin + '/icon-192.png?v=3',
+      badge: origin + '/badge-72.png?v=3',
+      image: data.image || undefined,
       tag: data.tag || 'alchemist',
       renotify: true,
+      timestamp: Date.now(),
+      vibrate: [120, 60, 120],
+      actions: [{ action: 'open', title: 'Open' }],
       data: { link: data.link || '' },
     })
   );

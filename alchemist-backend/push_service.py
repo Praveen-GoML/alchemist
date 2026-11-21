@@ -38,12 +38,20 @@ def _send_one(sub, payload: str):
         return sub.id, False
 
 
-def send_to_subscriptions(subs: Iterable, title: str, body: str, link: str = "", notification_id: int = 0) -> List[int]:
+def send_to_subscriptions(subs: Iterable, title: str, body: str, link: str = "", notification_id: int = 0, image: str = "") -> List[int]:
     """Push to every subscription. Returns ids of subscriptions that no longer exist (caller deletes them)."""
     subs = list(subs)
     if not subs or not is_configured():
         return []
-    payload = json.dumps({"title": title, "body": body, "link": link, "id": notification_id, "tag": f"alchemist-{notification_id}"})
+    payload = json.dumps({"title": title, "body": body, "link": link, "id": notification_id, "tag": f"alchemist-{notification_id}", "image": image})
     with ThreadPoolExecutor(max_workers=min(8, len(subs))) as pool:
         results = list(pool.map(lambda s: _send_one(s, payload), subs))
     return [sid for sid, gone in results if gone]
+
+
+def card_url(base_url: str, kind: str, title: str, body: str) -> str:
+    """Address of the banner image for a notification (served by GET /push/card.png)."""
+    from urllib.parse import urlencode
+    if not base_url:
+        return ""
+    return f"{base_url.rstrip('/')}/push/card.png?" + urlencode({"kind": kind, "title": title[:120], "body": body[:200]})

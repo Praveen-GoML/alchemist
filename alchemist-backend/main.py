@@ -12,6 +12,8 @@ from typing import List
 
 import dropbox_storage
 import push_service
+import card_service
+from fastapi.responses import Response
 from database import engine, get_db
 from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification, PushSubscription
 from schemas import *
@@ -488,6 +490,7 @@ def list_notifications(
 @app.post("/notifications")
 def create_notifications(
     payload: NotificationCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -533,7 +536,7 @@ def create_notifications(
             subs = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == row.recipient_email.lower()).all()
             if not subs:
                 continue
-            dead = push_service.send_to_subscriptions(subs, f"{row.title}", row.body, row.link or "", row.id)
+            dead = push_service.send_to_subscriptions(subs, f"{row.title}", row.body, row.link or "", row.id, push_service.card_url(_public_base(request), row.kind, row.title, row.body))
             pushed += len(subs) - len(dead)
             if dead:
                 db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
@@ -543,6 +546,22 @@ def create_notifications(
 
 # ── Device push subscriptions ──
 MAX_SUBSCRIPTIONS_PER_USER = 10
+
+
+def _public_base(request: Request) -> str:
+    """This API's public address (https behind Vercel's proxy), used to build banner-image links."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    if not host:
+        return ""
+    local = host.startswith(("localhost", "127.0.0.1"))
+    return f"{'http' if local else 'https'}://{host}"
+
+
+@app.get("/push/card.png")
+def push_card(kind: str = "info", title: str = "Alchemist", body: str = ""):
+    """Banner image for a device notification. Public: the browser fetches it without signing in."""
+    png = card_service.render_card(kind[:20], title[:120] or "Alchemist", body[:200])
+    return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/push/public-key")
@@ -596,6 +615,7 @@ def push_status(
 
 @app.post("/push/test")
 def push_test(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -611,7 +631,7 @@ def push_test(
     subs = db.query(PushSubscription).filter(func.lower(PushSubscription.user_email) == current_user.email.lower()).all()
     if not subs:
         return {"devices": 0, "pushed": 0}
-    dead = push_service.send_to_subscriptions(subs, row.title, row.body, "", row.id)
+    dead = push_service.send_to_subscriptions(subs, row.title, row.body, "", row.id, push_service.card_url(_public_base(request), row.kind, row.title, row.body))
     if dead:
         db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
         db.commit()
