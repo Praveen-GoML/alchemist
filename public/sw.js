@@ -18,7 +18,7 @@ self.addEventListener('push', (event) => {
       tag: data.tag || 'alchemist',
       renotify: true,
       timestamp: Date.now(),
-      vibrate: [120, 60, 120],
+      vibrate: [90, 50, 90, 50, 260], // Alchemist's signature buzz: two taps and a long one
       // timesheet reminders get two buttons: Finished (dismiss) and Open (Lattice)
       actions: data.kind === 'reminder'
         ? [{ action: 'finished', title: 'Finished' }, { action: 'open', title: 'Open' }]

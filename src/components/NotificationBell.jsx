@@ -212,7 +212,18 @@ export default function NotificationBell() {
                   <button type="button" className="npd-btn ghost" onClick={turnOffDevice} disabled={deviceBusy}>Turn off</button>
                 </span>
               </div>
-            ) : support.ok ? (
+            ) : null}
+            {deviceOn && /android/i.test(navigator.userAgent) && (
+              <div className="npd-row snd">
+                <span className="npd-ico"><Volume2 size={16} /></span>
+                <span className="npd-text">
+                  <b>Use the Alchemist sound on this phone</b>
+                  <small>Save the sound, then open Settings, Apps, Alchemist, Notifications, Sound and pick it.</small>
+                </span>
+                <a className="npd-btn" href="/sounds/alchemist-notification.wav" download="Alchemist.wav">Save sound</a>
+              </div>
+            )}
+            {!deviceOn && (support.ok ? (
               perm === 'denied' ? (
                 <div className="npd-row"><span className="npd-ico"><BellRing size={16} /></span><span className="npd-text"><b>Blocked in your browser</b><small>Allow notifications for this site in the browser settings, then come back.</small></span></div>
               ) : (
@@ -224,7 +235,7 @@ export default function NotificationBell() {
               )
             ) : support.reason === 'ios-install' ? (
               <div className="npd-row"><span className="npd-ico"><BellRing size={16} /></span><span className="npd-text"><b>Add Alchemist to your Home Screen</b><small>On iPhone: tap Share, then “Add to Home Screen”, and open Alchemist from there to turn on notifications.</small></span></div>
-            ) : null}
+            ) : null)}
             {deviceMsg && <p className="npd-err" role="alert">{deviceMsg}</p>}
           </div>
         </div>,
