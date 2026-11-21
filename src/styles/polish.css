@@ -1724,3 +1724,21 @@ body.collapsed .sbadge, .app.collapsed .sbadge { position: absolute; top: 4px; r
 @keyframes nbell-pulse { 0% { box-shadow: 0 0 0 2px var(--soft, #F5F1EC), 0 0 0 0 rgba(237,125,49,.55); } 70% { box-shadow: 0 0 0 2px var(--soft, #F5F1EC), 0 0 0 9px rgba(237,125,49,0); } 100% { box-shadow: 0 0 0 2px var(--soft, #F5F1EC), 0 0 0 0 rgba(237,125,49,0); } }
 .npd-actions { display: inline-flex; flex-direction: column; gap: 6px; flex: none; }
 @media (prefers-reduced-motion: reduce) { .nbell-attn { animation: none; } }
+
+
+/* ── Timeline: easier to read ── */
+.gx-top { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; padding: 4px 16px 12px; }
+.gx-top .gx-legend { border-top: 0; padding: 0; gap: 8px 18px; }
+.gx-legend small { color: var(--muted); opacity: .8; font-size: 11.5px; }
+.gx-legend .k.ms { width: 12px; height: 12px; transform: rotate(45deg); background: #fff; border: 3px solid #4A7CF0; border-radius: 3px; }
+.gx-legend .k.today { width: 2px; height: 14px; border-radius: 1px; background: #E2553F; }
+.gx-range { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--soft); flex: none; }
+.gx-range button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.gx-range button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.gx-head, .gx-row { grid-template-columns: 280px 1fr; }
+.gx-dates { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.gx-next { font-weight: 700; }
+.gx-away { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); font-style: normal; padding: 4px 10px; border-radius: 999px; background: var(--soft); }
+.gx-signlabel { position: absolute; top: 61px; transform: translateX(8px); z-index: 3; font-size: 11px; font-weight: 700; color: #4A7CF0; white-space: nowrap; pointer-events: none; }
+.gx-signlabel.left { transform: translateX(calc(-100% - 8px)); }
+@media (max-width: 900px) { .gx-head, .gx-row { grid-template-columns: 200px 1fr; } }

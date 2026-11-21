@@ -94,7 +94,7 @@ export default function Projects({ data, updateData, ui, setUi }) {
   const { projects=[], members=[], checklist={}, clProjects=[], items=[], matrixProjects=[] } = data;
   const [dlgProj, setDlgProj] = useState(null); // null=closed, {}=new, proj=edit
 
-  const { psort={k:'sno',dir:-1}, pf=[], pq='', powner='', projView=(typeof window !== 'undefined' && window.innerWidth < 700 ? 'tile' : 'list'), pop=null } = ui;
+  const { psort={k:'sno',dir:-1}, pf=[], pq='', powner='', tlRange='focus', projView=(typeof window !== 'undefined' && window.innerWidth < 700 ? 'tile' : 'list'), pop=null } = ui;
   const set = patch => setUi(prev => ({...prev, ...patch}));
 
   // Compute member's assigned projects (null = see all, [] = see none)
@@ -222,8 +222,20 @@ export default function Projects({ data, updateData, ui, setUi }) {
     P.forEach(p => ['start', 'end', 'pUatStart', 'pUatSign', 'rUatStart', 'rUatSign'].forEach(f => { if (p[f]) ds.push(p[f]); }));
     ds.push(iso(t)); ds.sort();
     if (ds.length < 2) return <p className="muted">Not enough date data to show a timeline.</p>;
-    const a = parse(ds[0]); a.setDate(1);
-    const z = parse(ds[ds.length - 1]); z.setMonth(z.getMonth() + 1); z.setDate(1);
+    let a = parse(ds[0]); a.setDate(1);
+    let z = parse(ds[ds.length - 1]); z.setMonth(z.getMonth() + 1); z.setDate(1);
+    const focus = tlRange !== 'all';
+    if (focus) {
+      // zoom to what matters now: 2 months back to 4 months ahead, so bars are wide enough to read
+      const fa = new Date(t.getFullYear(), t.getMonth() - 2, 1);
+      const fz = new Date(t.getFullYear(), t.getMonth() + 4, 1);
+      if (fa > a) a = fa;
+      if (fz < z) z = fz;
+      if (z <= a) z = new Date(a.getFullYear(), a.getMonth() + 6, 1);
+    }
+    const before = s => s && parse(s) < a;
+    const after = s => s && parse(s) >= z;
+    const short = s => parse(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const span = days(a, z) || 1;
     const pos = d => Math.max(0, Math.min(100, (days(a, d) / span) * 100));
     const posS = s => pos(parse(s));
@@ -271,6 +283,20 @@ export default function Projects({ data, updateData, ui, setUi }) {
           <div className="wide"><b>{upcoming ? upcoming.p.name : '—'}</b><span>{upcoming ? `Next sign-off · ${d2(upcoming.uSign)} (${days(t, parse(upcoming.uSign))} d)` : 'No upcoming sign-off'}</span></div>
         </div>
 
+        <div className="gx-top">
+          <div className="gx-legend">
+            <span><i className="k bar" />Build time <small>(solid = already passed)</small></span>
+            <span><i className="k late" />Running past planned end</span>
+            <span><i className="k uat" />Client testing (UAT)</span>
+            <span><i className="k ms" />UAT sign-off date</span>
+            <span><i className="k today" />Today</span>
+          </div>
+          <div className="gx-range" role="group" aria-label="Timeline range">
+            <button type="button" className={focus ? 'on' : ''} onClick={() => set({ tlRange: 'focus' })}>Now</button>
+            <button type="button" className={!focus ? 'on' : ''} onClick={() => set({ tlRange: 'all' })}>All dates</button>
+          </div>
+        </div>
+
         <div className="gx">
           <div className="gx-head">
             <div className="gx-left">Project</div>
@@ -301,20 +327,24 @@ export default function Projects({ data, updateData, ui, setUi }) {
                 <div className="gx-left">
                   <b>{p.name}</b>
                   <span className="gx-sub"><i className="gx-dot" />{p.status}{p.team ? ` · ${p.team}` : ''}</span>
+                  {hasBuild && <span className="gx-dates">Build {short(p.start)} – {short(p.end)}</span>}
                   <span className={`gx-next ${tone}`}>{next}</span>
                 </div>
                 <div className="gx-lane">
                   {months.map(m => <i key={+m} className="gx-mline" style={{ left: monthEdge(m) + '%' }} />)}
                   <i className="gx-today" style={{ left: todayX + '%' }} />
 
-                  {hasBuild && (
+                  {hasBuild && before(p.end) && !(uStart && uSign && !before(uSign)) && (
+                    <span className="gx-away">Finished before this view · ended {short(p.end)}</span>
+                  )}
+                  {hasBuild && !after(p.start) && !(before(p.end) && !(uStart && uSign && !before(uSign))) && (
                     <i
                       className="gx-bar"
                       style={{ left: sX + '%', width: w + '%' }}
                       title={`${p.name} · build\n${long(p.start)} → ${long(p.end)} (${dur(p.start, p.end)})\n${done ? 'Completed' : `${Math.round(elapsed * 100)}% of the build window has passed`}`}
                     >
                       <i className="gx-fill" style={{ width: Math.round(elapsed * 100) + '%' }} />
-                      <em>{dur(p.start, p.end)}</em>
+                      <em>{w > 11 ? `Build · ${dur(p.start, p.end)}` : dur(p.start, p.end)}</em>
                     </i>
                   )}
                   {endLate > 0 && (
@@ -331,6 +361,7 @@ export default function Projects({ data, updateData, ui, setUi }) {
                         title={`${slipped ? 'Revised UAT' : 'UAT window'}\n${long(uStart)} → ${long(uSign)}${slipped ? `\nSlipped ${uatDelay(p)} days from the plan` : ''}`}
                       />
                       <i className="gx-ms" style={{ left: posS(uSign) + '%' }} title={`UAT sign-off\n${long(uSign)}`} />
+                      <span className={`gx-signlabel${posS(uSign) > 82 ? ' left' : ''}`} style={{ left: posS(uSign) + '%' }}>Sign-off {short(uSign)}</span>
                     </>
                   )}
 
@@ -341,13 +372,6 @@ export default function Projects({ data, updateData, ui, setUi }) {
           })}
         </div>
 
-        <div className="gx-legend">
-          <span><i className="k bar" />Build (solid = time passed)</span>
-          <span><i className="k late" />Past planned end</span>
-          <span><i className="k uat" />UAT window</span>
-          <span><i className="k ms" />UAT sign-off</span>
-          <span><i className="k today" />Today</span>
-        </div>
       </div>
     );
   };
