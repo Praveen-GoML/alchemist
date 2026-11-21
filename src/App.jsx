@@ -12,6 +12,7 @@ import { mondayOf } from './utils/helpers';
 import './utils/theme';
 import './styles.css';
 import './styles/polish.css';
+import { setStatusBarDim } from './utils/theme';
 
 import SplashScreen from './components/common/SplashScreen';
 function AuthenticatedApp() {
@@ -62,7 +63,8 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     document.body.classList.toggle('navopen', !!navOpen);
-    return () => document.body.classList.remove('navopen');
+    setStatusBarDim(!!navOpen);
+    return () => { document.body.classList.remove('navopen'); setStatusBarDim(false); };
   }, [navOpen]);
 
   // Keep other open tabs in sync: when another tab saves, adopt its data.
