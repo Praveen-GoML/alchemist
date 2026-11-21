@@ -13,7 +13,8 @@ self.addEventListener('push', (event) => {
       // absolute URLs + version so the phone always fetches the current artwork
       icon: origin + '/icon-192.png?v=3',
       badge: origin + '/badge-72.png?v=3',
-      image: data.image || undefined,
+      // banner image on phones only; desktop keeps the plain notification
+      image: /Android|iPhone|iPad|Mobi/i.test(self.navigator.userAgent) ? (data.image || undefined) : undefined,
       tag: data.tag || 'alchemist',
       renotify: true,
       timestamp: Date.now(),
