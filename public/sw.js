@@ -7,6 +7,8 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data ? event.data.text() : '' }; }
   const title = data.title || 'Alchemist';
   const origin = self.location.origin;
+  // if Alchemist is open in a tab, let it play its own sound too
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(ws => ws.forEach(w => w.postMessage({ type: 'chime' }))));
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',

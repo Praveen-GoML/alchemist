@@ -23,7 +23,9 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { uploadProjectFile, getStorageStatus, ALLOWED_EXT, MAX_UPLOAD_MB } from '../../services/documentStorage';
+import { uploadProjectFile, ALLOWED_EXT, MAX_UPLOAD_MB } from '../../services/documentStorage';
+import DocViewerModal from '../DocViewerModal';
+import DocCard from '../DocCard';
 
 import { dialog } from '../../utils/dialog';
 const DEFAULT_CATEGORIES = [
@@ -51,6 +53,10 @@ export default function Docs({ data, updateData }) {
   const [selectedProject, setSelectedProject] = useState(() => {
     return visibleProjects[0]?.name || projects[0]?.name || '';
   });
+  // if the chosen project is not available (data still loading, or access changed), fall back to the first one
+  useEffect(() => {
+    if (!visibleProjects.some(p => p.name === selectedProject)) setSelectedProject(visibleProjects[0]?.name || '');
+  }, [visibleProjects, selectedProject]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState(null);
@@ -59,8 +65,7 @@ export default function Docs({ data, updateData }) {
   const [isAddingDoc, setIsAddingDoc] = useState(false);
   const [addMode, setAddMode] = useState('upload'); // 'upload' or 'link'
   const [isUploading, setIsUploading] = useState(false);
-  const [storage, setStorage] = useState(null); // { storage: 'dropbox' | 'local' }
-  useEffect(() => { let on = true; getStorageStatus().then(r => on && setStorage(r)); return () => { on = false; }; }, []);
+  const [viewing, setViewing] = useState(null); // the document open in the in-page viewer
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
@@ -106,7 +111,10 @@ export default function Docs({ data, updateData }) {
       const newDoc = {
         id: 'doc_' + Date.now(),
         title: form.title.trim() || selectedFile.name,
-        url: res.publicUrl,
+        url: res.publicUrl || '',
+        path: res.filePath || '',
+        isPrivate: !!res.isPrivate,
+        size: selectedFile.size >= 1048576 ? `${(selectedFile.size / 1048576).toFixed(1)} MB` : `${(selectedFile.size / 1024).toFixed(1)} KB`,
         category: autoCategory,
         notes: form.notes.trim() || `${res.storageProvider} • ${isExcel ? 'Excel Sheet' : 'BRD Document'} (${(selectedFile.size / 1024).toFixed(1)} KB)`,
         isUploaded: true,
@@ -196,7 +204,7 @@ export default function Docs({ data, updateData }) {
     const matchSearch = !searchQuery.trim() || 
       d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (d.notes && d.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      d.url.toLowerCase().includes(searchQuery.toLowerCase());
+      (d.url || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
 
@@ -349,22 +357,6 @@ export default function Docs({ data, updateData }) {
             })}
           </div>
 
-          {/* Storage status */}
-          <div className="docs2-howto">
-            <div className="docs2-howto-title">Online storage</div>
-            {storage?.storage === 'dropbox' ? (
-              <p className="docs2-ok"><i className="docs2-dot ok" /> Connected to Dropbox. Uploads are stored online and shared by link with the team.</p>
-            ) : storage?.storage === 'local' ? (
-              <p className="docs2-ok"><i className="docs2-dot warn" /> Dropbox is not connected yet, so uploads are kept on the server disk only. Ask an admin to add the Dropbox keys in the backend (see <b>dropbox_setup.py</b>).</p>
-            ) : (
-              <p className="docs2-ok"><i className="docs2-dot off" /> Upload server not reachable. You can still paste a Drive, SharePoint or Dropbox link.</p>
-            )}
-            <ol>
-              <li><b>Upload</b> a file (up to {MAX_UPLOAD_MB} MB), or</li>
-              <li><b>Paste a link</b> from Dropbox, Google Drive or SharePoint.</li>
-            </ol>
-            <p className="docs2-fine">Never put passwords or keys in documents.</p>
-          </div>
         </div>
 
         {/* Right Content Area: Document List */}
@@ -411,139 +403,32 @@ export default function Docs({ data, updateData }) {
               )}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-              {filteredDocs.map(doc => {
-                const catInfo = DEFAULT_CATEGORIES.find(c => c.id === doc.category) || DEFAULT_CATEGORIES[0];
-                const CatIcon = catInfo.icon;
-                const isCopied = copiedId === doc.id;
-
-                return (
-                  <div
-                    key={doc.id}
-                    className="card"
-                    style={{
-                      borderRadius: '12px',
-                      padding: '16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.15s ease',
-                      border: '1px solid var(--line)',
-                    }}
-                  >
-                    <div>
-                      {/* Card Top: Category badge and Actions */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: `${catInfo.color}15`,
-                          color: catInfo.color,
-                        }}>
-                          <CatIcon size={13} />
-                          {catInfo.label}
-                        </span>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <button
-                            title="Copy link"
-                            onClick={() => handleCopy(doc.id, doc.url)}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              borderRadius: '4px',
-                              color: isCopied ? '#10B981' : 'var(--muted)',
-                              transition: 'color 0.15s ease'
-                            }}
-                          >
-                            {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                          </button>
-
-                          {canEdit && (
-                            <button
-                              title="Delete"
-                              onClick={() => handleDeleteDoc(doc.id)}
-                              style={{
-                                border: 'none',
-                                background: 'transparent',
-                                cursor: 'pointer',
-                                padding: '4px',
-                                borderRadius: '4px',
-                                color: 'var(--muted)',
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
-                              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Title */}
-                      <h4 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: 650, color: 'var(--ink)' }}>
-                        {doc.title}
-                      </h4>
-
-                      {/* Notes / Description */}
-                      {doc.notes && (
-                        <p style={{ margin: '0 0 12px', fontSize: '12.5px', color: 'var(--muted)', lineHeight: 1.4 }}>
-                          {doc.notes}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Card Bottom: Open Link Button */}
-                    <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--line)' }}>
-                      <a
-                        href={safeUrl(doc.url) || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          background: 'var(--soft)',
-                          border: '1px solid var(--line)',
-                          color: 'var(--ink)',
-                          fontSize: '12.5px',
-                          fontWeight: 600,
-                          textDecoration: 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = 'var(--accent-soft)';
-                          e.currentTarget.style.borderColor = 'var(--accent)';
-                          e.currentTarget.style.color = 'var(--accent-text)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = 'var(--soft)';
-                          e.currentTarget.style.borderColor = 'var(--line)';
-                          e.currentTarget.style.color = 'var(--ink)';
-                        }}
-                      >
-                        <span>Open Document</span>
-                        <ExternalLink size={13} />
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="dc-grid">
+              {filteredDocs.map(doc => (
+                <DocCard
+                  key={doc.id}
+                  doc={doc}
+                  category={DEFAULT_CATEGORIES.find(c => c.id === doc.category) || DEFAULT_CATEGORIES[0]}
+                  canEdit={canEdit}
+                  copied={copiedId === doc.id}
+                  onCopy={() => handleCopy(doc.id, doc.url)}
+                  onDelete={() => handleDeleteDoc(doc.id)}
+                  onRead={() => setViewing(doc)}
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
+
+      {viewing && (
+        <DocViewerModal
+          doc={viewing}
+          canDownload={canEdit}
+          categoryLabel={(DEFAULT_CATEGORIES.find(c => c.id === viewing.category) || DEFAULT_CATEGORIES[0]).label}
+          onClose={() => setViewing(null)}
+        />
+      )}
 
       {/* Modal: Add Document (Dual Mode: Direct File Upload to MEGA OR Paste Link) */}
       {isAddingDoc && (

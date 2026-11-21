@@ -13,6 +13,7 @@ export default function PersonEditModal({ member, mode = 'self', combos = [], ta
   const [f, setF] = useState({
     name: member.name || '', role: member.role || '', email: member.email || '',
     github: member.github || '', skills: member.skills || '', combo: member.combo || '',
+    inactive: !!member.inactive,
   });
   const [err, setErr] = useState('');
 
@@ -36,7 +37,7 @@ export default function PersonEditModal({ member, mode = 'self', combos = [], ta
     }
     const skills = f.skills.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).join(', ');
     const patch = full
-      ? { name, role, email, github: f.github.trim().replace(/^@/, ''), skills, combo: f.combo }
+      ? { name, role, email, github: f.github.trim().replace(/^@/, ''), skills, combo: f.combo, inactive: !!f.inactive }
       : { github: f.github.trim().replace(/^@/, ''), skills };
     onSave(patch);
   };
@@ -64,6 +65,16 @@ export default function PersonEditModal({ member, mode = 'self', combos = [], ta
               </div>
             )}
           </div>
+          {full && (
+            <div className="pe-status" role="group" aria-label="Status">
+              <span>Status</span>
+              <div className="pe-seg">
+                <button type="button" className={!f.inactive ? 'on' : ''} onClick={() => setF(p => ({ ...p, inactive: false }))}>Active</button>
+                <button type="button" className={f.inactive ? 'on off' : ''} onClick={() => setF(p => ({ ...p, inactive: true }))}>Inactive</button>
+              </div>
+              <small>{f.inactive ? 'Shown with an Inactive tag on the team page.' : 'Working on projects as usual.'}</small>
+            </div>
+          )}
           <label className="full" style={{ display: 'block', marginTop: 12 }}><span>Skills</span>
             <textarea rows="3" value={f.skills} onChange={set('skills')} placeholder="e.g. RAG, Chatbots, Python, AWS" />
           </label>

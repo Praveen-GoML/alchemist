@@ -57,6 +57,34 @@ export default function Overview({ data }) {
   const idone = imp.filter(i => i.status==='Done').length;
   const iprog = imp.filter(i => i.status==='In progress').length;
 
+  // Charts ---------------------------------------------------------------
+  const STATUS_COLOR = { 'On Schedule': '#3DA56A', 'Behind': '#F2A23A', 'Delayed': '#E2553F', 'Not Started': '#A39C95', 'Completed': '#4A7CF0' };
+  const totalProj = projects.length;
+  const R = 54, CIRC = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = PSTAT.filter(s => counts[s]).map(s => {
+    const len = (counts[s] / (totalProj || 1)) * CIRC;
+    const seg = { s, n: counts[s], len, off: acc };
+    acc += len;
+    return seg;
+  });
+
+  const avg = (sum, n) => (n ? sum / n : null);
+  const ringData = [
+    { label: 'Lattice', v: avg(lsum, ln), hint: 'Lattice compliance this week' },
+    { label: 'Timesheet', v: avg(tsum, tn), hint: 'Timesheet compliance this week' },
+    { label: 'Checklist', v: sums.length ? sums.reduce((a, [, s]) => a + s.overall, 0) / sums.length : null, hint: 'Average delivery-checklist progress' },
+  ];
+
+  // UAT sign-offs by month: overdue first, then the next four months
+  const signs = projects.filter(p => p.status !== 'Completed' && (p.rUatSign || p.pUatSign)).map(p => parse(p.rUatSign || p.pUatSign));
+  const cols = [{ label: 'Overdue', n: signs.filter(d => d < t).length, late: true }];
+  for (let i = 0; i < 4; i++) {
+    const m0 = new Date(t.getFullYear(), t.getMonth() + i, 1), m1 = new Date(t.getFullYear(), t.getMonth() + i + 1, 1);
+    cols.push({ label: m0.toLocaleDateString('en-GB', { month: 'short' }), n: signs.filter(d => d >= t && d >= m0 && d < m1).length });
+  }
+  const colMax = Math.max(1, ...cols.map(c => c.n));
+
   return (
     <div>
       <div className="greet">
@@ -66,6 +94,63 @@ export default function Overview({ data }) {
         Every Go Alchemists tracker in one place. Today is{' '}
         {t.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}.
       </p>
+
+      {/* At a glance: three small charts */}
+      <div className="hg">
+        <section className="card hg-card">
+          <div className="ch"><h2>Projects by status</h2></div>
+          <div className="hg-donut">
+            <svg viewBox="0 0 140 140" role="img" aria-label={`${totalProj} projects by status`}>
+              <circle cx="70" cy="70" r={R} fill="none" stroke="var(--soft)" strokeWidth="16" />
+              {segs.map(g => (
+                <circle key={g.s} cx="70" cy="70" r={R} fill="none" stroke={STATUS_COLOR[g.s]} strokeWidth="16"
+                  strokeDasharray={`${Math.max(g.len - 3, 0.5)} ${CIRC}`} strokeDashoffset={-g.off}
+                  transform="rotate(-90 70 70)" strokeLinecap="butt"><title>{`${g.s}: ${g.n}`}</title></circle>
+              ))}
+              <text x="70" y="68" textAnchor="middle" className="hg-big">{totalProj}</text>
+              <text x="70" y="86" textAnchor="middle" className="hg-small">projects</text>
+            </svg>
+            <ul className="hg-leg">
+              {segs.map(g => (
+                <li key={g.s}><i style={{ background: STATUS_COLOR[g.s] }} />{g.s}<b>{g.n}</b></li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="card hg-card">
+          <div className="ch"><h2>Health this week</h2></div>
+          <div className="hg-rings">
+            {ringData.map(r => {
+              const rr = 30, c = 2 * Math.PI * rr, val = r.v == null ? 0 : Math.max(0, Math.min(1, r.v));
+              return (
+                <div key={r.label} className="hg-ring" title={r.hint}>
+                  <svg viewBox="0 0 80 80" role="img" aria-label={`${r.label} ${r.v == null ? 'no data' : Math.round(val * 100) + '%'}`}>
+                    <circle cx="40" cy="40" r={rr} fill="none" stroke="var(--soft)" strokeWidth="9" />
+                    {val > 0 && <circle cx="40" cy="40" r={rr} fill="none" stroke="var(--accent)" strokeWidth="9" strokeLinecap="round"
+                      strokeDasharray={`${val * c} ${c}`} transform="rotate(-90 40 40)" />}
+                    <text x="40" y="45" textAnchor="middle" className="hg-ringnum">{r.v == null ? '—' : Math.round(val * 100) + '%'}</text>
+                  </svg>
+                  <span>{r.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="card hg-card">
+          <div className="ch"><h2>UAT sign-offs ahead</h2></div>
+          <div className="hg-cols" role="img" aria-label="UAT sign-offs by month">
+            {cols.map(c => (
+              <div key={c.label} className={`hg-col${c.late ? ' late' : ''}`} title={`${c.label}: ${c.n} sign-off${c.n === 1 ? '' : 's'}`}>
+                <b>{c.n}</b>
+                <i style={{ height: Math.max(c.n / colMax * 100, c.n ? 8 : 3) + '%' }} />
+                <span>{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
 
       {/* Portfolio */}
       <section className="card">
@@ -95,24 +180,42 @@ export default function Overview({ data }) {
               : left < 0 ? `${-left}d past UAT sign-off`
               : left === 0 ? 'UAT sign-off today'
               : `${left}d to UAT sign-off`;
+            const cl = clProjects.includes(p.name) ? clSummary(p.name, checklist, items) : null;
+            const clPct = cl ? Math.round(cl.overall * 100) : null;
+            const people = (p.team || '').split(',').map(x => x.trim()).filter(Boolean);
+            const overdue = left !== null && left < 0 && p.status !== 'Completed';
             return (
               <a key={p.sno} className={`pcard st-${slug(p.status)}`} href="#projects" title={`${p.name} — ${p.status}`}>
                 <div className="pc-top">
                   <span className="pc-av" aria-hidden="true">{sym(p.name)}</span>
+                  <div className="pc-id">
+                    <span className="pc-name">{p.name}</span>
+                    <span className="pc-sub">#{p.sno}{p.sub ? ` · ${p.sub}` : ''}</span>
+                  </div>
                   <span className="pc-pill">{label}</span>
                 </div>
-                <div className="pc-name">{p.name}</div>
-                <div className="pc-sub">#{p.sno}{p.team ? ` · ${p.team}` : ''}{p.sub ? ` · ${p.sub}` : ''}</div>
-                {elapsed !== null && (
-                  <div className="pc-bar" role="progressbar" aria-valuenow={elapsed} aria-valuemin={0} aria-valuemax={100} aria-label="Timeline elapsed">
-                    <i style={{ width: elapsed + '%' }} />
+
+                <div className="pc-metrics">
+                  <div className="pc-m" title="How much of the planned build window has passed">
+                    <div className="pc-mh"><span>Build time</span><b>{elapsed !== null ? elapsed + '%' : '—'}</b></div>
+                    <div className="pc-bar"><i style={{ width: (elapsed || 0) + '%' }} /></div>
                   </div>
-                )}
-                <div className="pc-foot">
-                  <span className={left !== null && left < 0 && p.status !== 'Completed' ? 'pc-late' : ''}>
-                    {p.status === 'Completed' ? 'Completed' : rel}
+                  <div className="pc-m" title="Delivery checklist progress">
+                    <div className="pc-mh"><span>Checklist</span><b>{clPct !== null ? clPct + '%' : '—'}</b></div>
+                    <div className="pc-bar alt"><i style={{ width: (clPct || 0) + '%' }} /></div>
+                  </div>
+                </div>
+
+                <div className="pc-meta">
+                  <span className="pc-people" title={people.join(', ') || 'No one assigned'}>
+                    {people.slice(0, 2).map(n => <i key={n}>{n[0].toUpperCase()}</i>)}
+                    {people.length > 0 && <em className="pn">{people[0].split(' ')[0]}{people.length > 1 ? ` +${people.length - 1}` : ''}</em>}
+                    {!people.length && <em>No one assigned</em>}
                   </span>
-                  {u && <span className="pc-date">{fmt(u)}</span>}
+                  <span className={`pc-uat${overdue ? ' late' : ''}`}>
+                    {p.status === 'Completed' ? 'Completed' : rel}
+                    {u && <b>{fmt(u)}</b>}
+                  </span>
                 </div>
                 {p.blocker && <div className="pc-blk" title={p.blocker}>⚠ {p.blocker}</div>}
               </a>
@@ -183,23 +286,6 @@ export default function Overview({ data }) {
               <span className="empty-icon">✓</span>
               <p className="empty-text">Nobody is marked on leave today</p>
             </div>
-          )}
-        </section>
-
-        {/* Blockers */}
-        <section className="card">
-          <div className="ch">
-            <h2>Open blockers</h2>
-            <span className="count">{bl.length}</span>
-          </div>
-          {bl.length ? (
-            <ul className="blk">
-              {bl.map(p => (
-                <li key={p.sno}><b>{p.name}</b><span>{p.blocker}</span></li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">No blockers logged.</p>
           )}
         </section>
 

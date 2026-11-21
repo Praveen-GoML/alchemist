@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing } from 'lucide-react';
+import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { AUTH_API_URL } from '../apiConfig';
+import { playSound, soundEnabled, setSoundEnabled } from '../utils/sound';
 import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed, sendTestNotification } from '../services/push';
 
 const KIND = {
@@ -27,6 +28,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('all');
   const [toast, setToast] = useState(null);
+  const [soundOn, setSoundOn] = useState(soundEnabled);
   // device notifications (Web Push)
   const support = pushSupport();
   const [perm, setPerm] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'denied'));
@@ -42,6 +44,7 @@ export default function NotificationBell() {
 
   const onNew = useCallback((fresh) => {
     const n = fresh[0];
+    playSound('notify');
     setToast(fresh.length > 1 ? { title: `${fresh.length} new notifications`, body: n.title } : { title: n.title, body: n.body });
     setTimeout(() => setToast(null), 6000);
     // desktop alert when the tab is in the background
@@ -152,7 +155,13 @@ export default function NotificationBell() {
               <h3>Notifications</h3>
               <span>{unread ? `${unread} unread` : 'You are all caught up'}</span>
             </div>
-            <button type="button" className="npanel-link" onClick={readAll} disabled={!unread}><Check size={14} /> Mark all read</button>
+            <span className="npanel-headbtns">
+              <button type="button" className={`npanel-snd${soundOn ? ' on' : ''}`} aria-pressed={soundOn} title={soundOn ? 'Sound on: click to mute' : 'Sound off: click to turn on'}
+                onClick={() => { const next = !soundOn; setSoundOn(next); setSoundEnabled(next); if (next) playSound('notify', { force: true }); }}>
+                {soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
+              </button>
+              <button type="button" className="npanel-link" onClick={readAll} disabled={!unread}><Check size={14} /> Mark all read</button>
+            </span>
           </div>
 
           <div className="npanel-tabs" role="tablist">

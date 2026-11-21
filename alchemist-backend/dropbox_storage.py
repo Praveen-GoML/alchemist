@@ -36,7 +36,7 @@ def _access_token() -> str:
     with _lock:
         if _cache["token"] and time.time() < _cache["expires_at"] - 60:
             return _cache["token"]
-        res = requests.post(
+        res = _post(
             _TOKEN_URL,
             data={"grant_type": "refresh_token", "refresh_token": os.environ["DROPBOX_REFRESH_TOKEN"]},
             auth=(os.environ["DROPBOX_APP_KEY"], os.environ["DROPBOX_APP_SECRET"]),
@@ -50,6 +50,20 @@ def _access_token() -> str:
         return _cache["token"]
 
 
+def _post(*args, **kwargs):
+    """requests.post with one retry; network failures become a DropboxError (a readable 502, not a bare 500)."""
+    last = None
+    for _ in range(2):
+        try:
+            return requests.post(*args, **kwargs)
+        except requests.RequestException as e:
+            last = e
+    raise DropboxError(
+        "Dropbox closed the connection during the upload. If this keeps happening, the Dropbox app is probably missing "
+        "the files.content.write permission (Dropbox App Console > Permissions), and a new refresh token is needed after changing it."
+    ) from last
+
+
 def _safe(part: str) -> str:
     return re.sub(r"[^A-Za-z0-9._ -]", "_", part).strip(" .") or "file"
 
@@ -60,7 +74,7 @@ def upload(project: str, filename: str, data: bytes) -> dict:
     folder = (os.environ.get("DROPBOX_FOLDER") or "/Alchemist").rstrip("/")
     path = f"{folder}/{_safe(project)}/{int(time.time())}_{_safe(filename)}"
 
-    res = requests.post(
+    res = _post(
         _UPLOAD_URL,
         headers={
             "Authorization": f"Bearer {token}",
@@ -71,21 +85,35 @@ def upload(project: str, filename: str, data: bytes) -> dict:
         timeout=120,
     )
     if res.status_code != 200:
+        if "not permitted" in res.text or "missing_scope" in res.text:
+            raise DropboxError("The Dropbox app does not have permission to upload. Enable files.content.write and sharing.write in the Dropbox App Console, then create a new refresh token.")
         raise DropboxError(f"Dropbox upload failed ({res.status_code}).")
     stored_path = res.json().get("path_display", path)
 
-    # Shared link so the whole team can open it in one click
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    link = requests.post(_SHARE_URL, headers=headers, json={"path": stored_path}, timeout=20)
-    if link.status_code == 200:
-        url = link.json()["url"]
-    elif link.status_code == 409:  # link already exists
-        existing = requests.post(_LIST_SHARE_URL, headers=headers, json={"path": stored_path, "direct_only": True}, timeout=20)
-        links = existing.json().get("links", []) if existing.status_code == 200 else []
-        if not links:
-            raise DropboxError("Uploaded, but could not create a share link.")
-        url = links[0]["url"]
-    else:
-        raise DropboxError(f"Uploaded, but sharing failed ({link.status_code}).")
+    # No shared link is created: files stay private in Dropbox and are read through the backend (see /files/content)
+    return {"path": stored_path, "url": ""}
 
-    return {"path": stored_path, "url": url}
+
+_DOWNLOAD_URL = "https://content.dropboxapi.com/2/files/download"
+
+
+def folder_root() -> str:
+    return (os.environ.get("DROPBOX_FOLDER") or "/Alchemist").rstrip("/")
+
+
+def download(path: str) -> bytes:
+    """Fetch a previously uploaded file's bytes. Only paths inside the app folder are allowed."""
+    root = folder_root().lower()
+    if ".." in path or not path.lower().startswith(root + "/"):
+        raise DropboxError("That file is not in the documents folder.")
+    token = _access_token()
+    res = _post(
+        _DOWNLOAD_URL,
+        headers={"Authorization": f"Bearer {token}", "Dropbox-API-Arg": json.dumps({"path": path})},
+        timeout=60,
+    )
+    if res.status_code == 409:
+        raise DropboxError("This file no longer exists in Dropbox.")
+    if res.status_code != 200:
+        raise DropboxError(f"Dropbox download failed ({res.status_code}).")
+    return res.content

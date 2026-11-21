@@ -18,7 +18,8 @@ if not app_key or not app_secret:
     sys.exit("App key and secret are required.")
 
 print("\nOpen this URL, click Allow, and copy the code Dropbox shows:\n")
-print(f"https://www.dropbox.com/oauth2/authorize?client_id={app_key}&response_type=code&token_access_type=offline\n")
+SCOPES = "files.content.write files.content.read sharing.write sharing.read"
+print(f"https://www.dropbox.com/oauth2/authorize?client_id={app_key}&response_type=code&token_access_type=offline&scope={SCOPES.replace(' ', '%20')}\n")
 code = input("Paste the code: ").strip()
 
 res = requests.post(
@@ -34,6 +35,7 @@ refresh = res.json().get("refresh_token")
 if not refresh:
     sys.exit("No refresh token returned. Make sure the URL used token_access_type=offline.")
 
+print("\nScopes granted to this token:", res.json().get("scope"))
 print("\nAdd these to alchemist-backend/.env:\n")
 print(f"DROPBOX_APP_KEY={app_key}")
 print(f"DROPBOX_APP_SECRET={app_secret}")

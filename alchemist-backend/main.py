@@ -787,7 +787,7 @@ async def upload_file(
             raise HTTPException(status_code=502, detail=str(e))
         return {
             "success": True, "filename": safe_name, "size": len(data),
-            "url": stored["url"], "path": stored["path"], "storage": "dropbox",
+            "url": "", "path": stored["path"], "storage": "dropbox", "private": True,
         }
 
     # No Dropbox configured: keep the file on the server disk (dev only; not durable on serverless hosts)
@@ -799,6 +799,29 @@ async def upload_file(
         "success": True, "filename": safe_name, "size": len(data),
         "url": f"{base_url}/uploads/{clean_name}", "path": f"/uploads/{clean_name}", "storage": "local",
     }
+
+_VIEW_TYPES = {
+    ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".txt": "text/plain; charset=utf-8", ".md": "text/plain; charset=utf-8", ".csv": "text/plain; charset=utf-8",
+}
+
+
+@app.get("/files/content")
+def read_file(path: str, current_user: User = Depends(get_current_active_user)):
+    """Stream a private document inline for the in-app reader. Signed-in users only; never a download link."""
+    if not dropbox_storage.is_configured():
+        raise HTTPException(status_code=404, detail="Document storage is not connected.")
+    try:
+        data = dropbox_storage.download(path)
+    except dropbox_storage.DropboxError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    ext = os.path.splitext(path)[1].lower()
+    return Response(
+        data,
+        media_type=_VIEW_TYPES.get(ext, "application/octet-stream"),
+        headers={"Content-Disposition": "inline", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HEALTH CHECK

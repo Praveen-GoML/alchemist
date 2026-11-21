@@ -33,7 +33,8 @@ export async function uploadProjectFile(projectName, file) {
   try {
     const { data } = await axios.post(`${AUTH_API_URL}/upload`, form, { timeout: 120000 });
     return {
-      publicUrl: data.url,
+      publicUrl: data.url || '',
+      isPrivate: !!data.private,
       filePath: data.path,
       fileName: file.name,
       fileSize: file.size,
@@ -45,5 +46,23 @@ export async function uploadProjectFile(projectName, file) {
     if (err?.response?.status === 403) throw new Error('Only PMs and TLs can upload documents.');
     if (err?.response?.status === 401) throw new Error('Your session expired. Please log in again.');
     throw new Error(typeof detail === 'string' ? detail : 'Upload failed. Check that the server is running.');
+  }
+}
+
+const VIEW_MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', txt: 'text/plain', md: 'text/plain', csv: 'text/plain' };
+
+/** Can this private file be shown inside the app? (Word, Excel, PowerPoint and zip files cannot.) */
+export const canPreviewPrivate = () => true; // every allowed type has a reader (see DocRenderer)
+
+/** Fetch a private document for the in-app reader (signed-in users only). Returns a Blob. */
+export async function fetchPrivateFile(path) {
+  if (!AUTH_API_URL) throw new Error('Document server is not configured.');
+  try {
+    const { data } = await axios.get(`${AUTH_API_URL}/files/content`, { params: { path }, responseType: 'blob', timeout: 60000 });
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    return new Blob([data], { type: VIEW_MIME[ext] || data.type || 'application/octet-stream' });
+  } catch (err) {
+    if (err?.response?.status === 401) throw new Error('Your session expired. Please log in again.');
+    throw new Error('Could not load this document. It may have been removed from Dropbox.');
   }
 }

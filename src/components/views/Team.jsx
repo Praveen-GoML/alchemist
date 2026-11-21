@@ -81,6 +81,9 @@ export default function Team({ data, updateData, ui, setUi }) {
       items.push({ label: 'Edit details…', icon: <Pencil size={15} />, onClick: () => setEditing({ m, mode: 'full' }) });
     }
     if (m.email) items.push({ label: 'Copy email', icon: <Copy size={15} />, onClick: () => copyText(m.email) });
+    if (canEdit) {
+      items.push({ label: m.inactive ? 'Mark as active' : 'Mark as inactive', icon: <Pencil size={15} />, onClick: () => savePerson(m, { inactive: !m.inactive }) });
+    }
     if (canEdit && !mine) {
       items.push('sep');
       items.push({ label: 'Remove from team', icon: <Trash2 size={15} />, danger: true, onClick: () => removeMember(m) });
@@ -125,15 +128,13 @@ export default function Team({ data, updateData, ui, setUi }) {
             const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('');
             const isMe = isOwnMember(m.name, m.email);
             return (
-              <article key={m.name} className="person" data-me={isMe ? 'true' : undefined} onContextMenu={(e) => { e.preventDefault(); setPctx({ x: e.clientX, y: e.clientY, m }); }}>
+              <article key={m.name} className={`person${m.inactive ? ' is-inactive' : ''}`} data-me={isMe ? 'true' : undefined} onContextMenu={(e) => { e.preventDefault(); setPctx({ x: e.clientX, y: e.clientY, m }); }}>
                 <div className="ph">
-                  {m.combo
-                    ? <span className={`tile t-${m.combo.toLowerCase()}`} title={m.combo}>{COMBO[m.combo]}</span>
-                    : <span className="tile t-none">{initials}</span>
-                  }
+                  <span className="tile t-none">{initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h3>
                       <span>{m.name}</span>
+                      {m.inactive && <span className="inactive-tag"><i />Inactive</span>}
                       {isMe && (
                         <span style={{ fontSize: '10.5px', background: '#DCFCE7', color: '#15803D', padding: '1.5px 7px', borderRadius: '10px', fontWeight: 700, border: '1px solid #BBF7D0' }}>
                           You
@@ -142,12 +143,6 @@ export default function Team({ data, updateData, ui, setUi }) {
                     </h3>
                     <div className="small muted" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{m.role}</span>
-                      {m.combo && (
-                        <span style={{ fontSize: '11px', background: 'var(--soft)', padding: '1px 6px', borderRadius: '4px' }}>
-                          {m.combo} combo
-                        </span>
-                      )}
-                      {m.note && <span style={{ fontStyle: 'italic' }}>· {m.note}</span>}
                     </div>
                   </div>
 
@@ -297,7 +292,7 @@ export default function Team({ data, updateData, ui, setUi }) {
                         )}
                       </div>
                       <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
-                        {m.role}{m.note ? ` · ${m.note}` : ''}
+                        {m.role}
                       </span>
                     </li>
                   );
