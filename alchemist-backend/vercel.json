@@ -11,5 +11,15 @@
       "src": "/(.*)",
       "dest": "main.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/cron/timesheet-reminder?slot=morning",
+      "schedule": "30 5 * * 1-5"
+    },
+    {
+      "path": "/cron/timesheet-reminder?slot=evening",
+      "schedule": "0 12 * * 1-5"
+    }
   ]
 }

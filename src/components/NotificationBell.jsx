@@ -87,7 +87,8 @@ export default function NotificationBell() {
   const go = (n) => {
     if (!n.read_at) read([n.id]);
     setOpen(false);
-    if (n.link) window.location.hash = n.link.replace(/^#?/, '#');
+    if (/^https?:\/\//i.test(n.link || '')) window.open(n.link, '_blank', 'noopener');
+    else if (n.link) window.location.hash = n.link.replace(/^#?/, '#');
   };
 
   const dismissAsk = () => {

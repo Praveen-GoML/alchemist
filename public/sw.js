@@ -17,7 +17,10 @@ self.addEventListener('push', (event) => {
       renotify: true,
       timestamp: Date.now(),
       vibrate: [120, 60, 120],
-      actions: [{ action: 'open', title: 'Open' }],
+      // timesheet reminders get two buttons: Finished (dismiss) and Open (Lattice)
+      actions: data.kind === 'reminder'
+        ? [{ action: 'finished', title: 'Finished' }, { action: 'open', title: 'Open' }]
+        : [{ action: 'open', title: 'Open' }],
       data: { link: data.link || '' },
     })
   );
@@ -26,6 +29,8 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const link = (event.notification.data && event.notification.data.link) || '';
+  if (event.action === 'finished') return; // done: just dismiss
+  if (/^https?:\/\//i.test(link)) { event.waitUntil(self.clients.openWindow(link)); return; } // external page, e.g. Lattice
   const hash = link ? (link.startsWith('#') ? link : '#' + link.replace(/^\/+/, '')) : '';
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

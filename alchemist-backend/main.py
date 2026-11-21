@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import time
 from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File, Form
@@ -562,6 +563,65 @@ def push_card(kind: str = "info", title: str = "Alchemist", body: str = ""):
     """Banner image for a device notification. Public: the browser fetches it without signing in."""
     png = card_service.render_card(kind[:20], title[:120] or "Alchemist", body[:200])
     return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
+# ── Scheduled reminders (called by Vercel Cron, see vercel.json) ──
+IST = timedelta(hours=5, minutes=30)
+TIMESHEET_URL = "https://lattice.goml.io/timesheet"
+REMINDERS = {
+    "morning": ("Time to fill your timesheet", "Good morning! Please update your timesheet for yesterday and plan today's hours."),
+    "evening": ("Fill your timesheet before you log off", "End of the day: please complete today's timesheet."),
+}
+
+
+@app.get("/cron/timesheet-reminder")
+def cron_timesheet_reminder(request: Request, slot: str = "morning", db: Session = Depends(get_db)):
+    """Notify every active user to fill their timesheet. Weekdays only; protected by CRON_SECRET."""
+    import hmac
+    from concurrent.futures import ThreadPoolExecutor
+    secret = os.getenv("CRON_SECRET", "")
+    if not secret:
+        raise HTTPException(status_code=503, detail="CRON_SECRET is not configured.")
+    given = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    if not hmac.compare_digest(given, secret):
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+    if slot not in REMINDERS:
+        raise HTTPException(status_code=400, detail="Unknown slot.")
+    now_ist = datetime.utcnow() + IST
+    if now_ist.weekday() >= 5:
+        return {"skipped": "weekend", "created": 0, "pushed": 0}
+
+    title, body = REMINDERS[slot]
+    recent = datetime.utcnow() - timedelta(hours=6)
+    already = {e.lower() for (e,) in db.query(Notification.recipient_email).filter(Notification.title == title, Notification.created_at > recent).all()}
+    users = db.query(User).filter(User.is_active == True).all()  # noqa: E712
+    rows = []
+    for u in users:
+        if u.email.lower() in already:
+            continue
+        rows.append(Notification(recipient_email=u.email.lower(), kind="info", title=title, body=body, link=TIMESHEET_URL, actor_name="Alchemist", actor_email=""))
+    if rows:
+        db.add_all(rows)
+        db.commit()
+
+    pushed = 0
+    if rows and push_service.is_configured():
+        by_email = {}
+        for sub in db.query(PushSubscription).all():
+            by_email.setdefault(sub.user_email.lower(), []).append(sub)
+        jobs = []
+        for row in rows:
+            payload = json.dumps({"title": title, "body": body, "link": TIMESHEET_URL, "kind": "reminder", "id": row.id, "tag": f"alchemist-{row.id}", "image": ""})
+            jobs += [(sub, payload) for sub in by_email.get(row.recipient_email, [])]
+        if jobs:
+            with ThreadPoolExecutor(max_workers=min(16, len(jobs))) as pool:
+                results = list(pool.map(lambda j: push_service._send_one(*j), jobs))
+            dead = [sid for sid, gone in results if gone]
+            pushed = len(results) - len(dead)
+            if dead:
+                db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
+                db.commit()
+    return {"slot": slot, "created": len(rows), "pushed": pushed}
 
 
 @app.get("/push/public-key")
