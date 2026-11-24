@@ -16,7 +16,7 @@ import push_service
 import card_service
 from fastapi.responses import Response
 from database import engine, get_db
-from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification, PushSubscription
+from models import Base, User, Project, Member, LeaveRecord, DailyHygiene, Checklist, ChecklistMeta, Improvement, Notification, PushSubscription, HubState
 from schemas import *
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
@@ -821,6 +821,113 @@ def read_file(path: str, current_user: User = Depends(get_current_active_user)):
         media_type=_VIEW_TYPES.get(ext, "application/octet-stream"),
         headers={"Content-Disposition": "inline", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SHARED HUB DATA (one versioned row per key, so the whole team sees the same data)
+# ══════════════════════════════════════════════════════════════════════════════
+from pydantic import BaseModel as _BM
+from typing import Any as _Any, Dict as _Dict, List as _List
+import json as _json
+
+HUB_MAX_VALUE_BYTES = 2 * 1024 * 1024
+
+
+class HubPut(_BM):
+    key: str
+    value: _Any = None
+    base_version: int = 0
+
+
+class HubKeys(_BM):
+    keys: _List[str]
+
+
+class HubSeed(_BM):
+    items: _Dict[str, _Any]
+
+
+def _hub_key(key: str) -> str:
+    key = (key or "").strip()
+    if not key or len(key) > 300:
+        raise HTTPException(status_code=400, detail="Invalid key.")
+    return key
+
+
+def _hub_row(r: "HubState"):
+    return {"value": _json.loads(r.value), "version": r.version}
+
+
+@app.get("/hub/state/versions")
+def hub_versions(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Cheap poll: {key: version} for everything stored."""
+    return {"versions": {k: v for k, v in db.query(HubState.key, HubState.version).all()}}
+
+
+@app.get("/hub/state/all")
+def hub_all(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    return {"items": {r.key: _hub_row(r) for r in db.query(HubState).all()}}
+
+
+@app.post("/hub/state/get")
+def hub_get(payload: HubKeys, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    keys = [_hub_key(k) for k in payload.keys][:500]
+    rows = db.query(HubState).filter(HubState.key.in_(keys)).all() if keys else []
+    return {"items": {r.key: _hub_row(r) for r in rows}}
+
+
+@app.put("/hub/state")
+def hub_put(payload: HubPut, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Save one key. `base_version` must be the version the caller last saw (0 = new key), otherwise 409 with the latest."""
+    key = _hub_key(payload.key)
+    text = _json.dumps(payload.value, separators=(",", ":"))
+    if len(text.encode("utf-8")) > HUB_MAX_VALUE_BYTES:
+        raise HTTPException(status_code=413, detail="That is too much data for one item.")
+    row = db.query(HubState).filter(HubState.key == key).first()
+    if row is None:
+        if payload.base_version != 0:
+            raise HTTPException(status_code=409, detail={"version": 0, "value": None})
+        db.add(HubState(key=key, value=text, version=1, updated_by=current_user.email, updated_at=datetime.utcnow()))
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            row = db.query(HubState).filter(HubState.key == key).first()
+            raise HTTPException(status_code=409, detail={"version": row.version if row else 0, "value": _json.loads(row.value) if row else None})
+        return {"version": 1}
+    # compare-and-swap: only succeeds if nobody saved since the caller read it
+    n = db.query(HubState).filter(HubState.key == key, HubState.version == payload.base_version).update(
+        {HubState.value: text, HubState.version: HubState.version + 1, HubState.updated_by: current_user.email, HubState.updated_at: datetime.utcnow()},
+        synchronize_session=False,
+    )
+    db.commit()
+    if n == 0:
+        db.expire_all()
+        cur = db.query(HubState).filter(HubState.key == key).first()
+        raise HTTPException(status_code=409, detail={"version": cur.version, "value": _json.loads(cur.value)})
+    return {"version": payload.base_version + 1}
+
+
+@app.post("/hub/state/seed")
+def hub_seed(payload: HubSeed, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """First-run import: stores keys that do not exist yet and never overwrites anything."""
+    existing = {k for (k,) in db.query(HubState.key).all()}
+    added = 0
+    for k, v in list(payload.items.items())[:2000]:
+        k = _hub_key(k)
+        if k in existing:
+            continue
+        text = _json.dumps(v, separators=(",", ":"))
+        if len(text.encode("utf-8")) > HUB_MAX_VALUE_BYTES:
+            continue
+        db.add(HubState(key=k, value=text, version=1, updated_by=current_user.email, updated_at=datetime.utcnow()))
+        added += 1
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()  # someone else seeded at the same moment; that is fine
+        added = 0
+    return {"inserted": added}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

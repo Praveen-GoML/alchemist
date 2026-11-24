@@ -74,7 +74,8 @@ export default function Dropdown({
     const onDown = (e) => {
       if (!listRef.current?.parentElement?.contains(e.target) && !btnRef.current?.contains(e.target)) close(false);
     };
-    const onScroll = (e) => { if (!listRef.current?.contains(e.target)) close(false); };
+    // scrolling the page closes the list, but scrolling inside the popover itself (it nudges its own list when it opens) must not
+    const onScroll = (e) => { if (!listRef.current?.parentElement?.contains(e.target)) close(false); };
     window.addEventListener('mousedown', onDown, true);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', close);

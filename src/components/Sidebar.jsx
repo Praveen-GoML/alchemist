@@ -139,7 +139,10 @@ export default function Sidebar({ view, data = {}, onToggleCollapse, onNavigate 
         })}
       </nav>
 
-      <div className="sfoot">© GOAL · Go Alchemists</div>
+      <div className="sfoot">
+        <button type="button" className="tour-replay" onClick={() => window.dispatchEvent(new Event('alchemist:start-tour'))}>Take the tour</button>
+        © GOAL · Go Alchemists
+      </div>
     </aside>
   );
 }

@@ -6,6 +6,14 @@ import { useAuth } from '../context/AuthContext';
 
 import { dialog } from '../utils/dialog';
 import NotificationBell from './NotificationBell';
+const SYNC_TEXT = { local: 'Saved on this device', loading: 'Loading shared data', synced: 'Synced with team', saving: 'Saving…', offline: 'Offline' };
+const SYNC_HINT = {
+  local: 'Data is stored in this browser only.',
+  loading: 'Fetching the latest team data.',
+  synced: 'Everyone sees the same data. Your changes are saved.',
+  saving: 'Saving your changes to the team.',
+  offline: 'Cannot reach the server. Your changes are kept here and will sync when it is back.',
+};
 const VIEW_TITLES = {
   overview:     'Home',
   projects:     'Projects',
@@ -19,7 +27,7 @@ const VIEW_TITLES = {
   docs:         'Docs & Drive',
 };
 
-export default function TopBar({ view, onMenuClick, onExpandSidebar, isCollapsed }) {
+export default function TopBar({ view, onMenuClick, onExpandSidebar, isCollapsed, syncStatus = 'local' }) {
   const { user, logout, isManagementUser, activePortal, togglePortal } = useAuth();
   const [theme, setThemeState] = useState(() => currentTheme());
 
@@ -75,7 +83,7 @@ export default function TopBar({ view, onMenuClick, onExpandSidebar, isCollapsed
       {/* Portal Mode Indicator Badge */}
 
 
-      <span id="save" role="status">Saved on this device</span>
+      <span id="save" role="status" data-state={syncStatus} title={SYNC_HINT[syncStatus]}>{SYNC_TEXT[syncStatus]}</span>
 
       <button
         type="button"

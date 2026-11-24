@@ -2,7 +2,8 @@ import { parse, iso, fmt, pct, pad, hygMembers, hygPct, mondayOf } from '../../u
 import { useAuth } from '../../context/AuthContext';
 
 export default function Hygiene({ data, updateData, ui, setUi }) {
-  const { user, canEditHygiene, isOwnMember, isManagementUser } = useAuth();
+  const { user, canEditHygiene, isOwnMember, isManagementUser, canEditAll } = useAuth();
+  const seeAll = canEditAll();
   const { hygiene={}, members=[] } = data;
   const { week } = ui;
   const set = patch => setUi(prev => ({...prev,...patch}));
@@ -41,7 +42,8 @@ export default function Hygiene({ data, updateData, ui, setUi }) {
   };
   const thisWeek = () => set({week: mondayOf(new Date())});
 
-  const hm = hygMembers(members);
+  // Members only see their own row; PMs and TLs see the whole team
+  const hm = hygMembers(members).filter(m => seeAll || canEditHygiene(m.name, m.email));
 
   const rows = hm.map(m => {
     const mw = W[m.name] || {};
@@ -95,7 +97,7 @@ export default function Hygiene({ data, updateData, ui, setUi }) {
 
   return (
     <div>
-      <p className="hint">Lattice and timesheets, checked after each DSM. Tap a cell to cycle Y (done) → N (missed) → L (leave, excluded) → blank. You can edit only your own row; everyone else's is read-only.</p>
+      <p className="hint">Lattice and timesheets, checked after each DSM. Tap a cell to cycle Y (done) → N (missed) → L (leave, excluded) → blank. {seeAll ? "You can edit only your own row; everyone else's is read-only." : 'This is your own row.'}</p>
 
       <div className="leave-header-bar" style={{ marginBottom: '16px' }}>
         <div className="leave-nav-group">
@@ -129,7 +131,7 @@ export default function Hygiene({ data, updateData, ui, setUi }) {
         <div className="ch">
           <h2>{weekLabel}</h2>
           <span className="small">
-            Team: Lattice <b>{colL[1] ? pct(colL[0]/colL[1]) : '—'}</b> · Timesheets <b>{colT[1] ? pct(colT[0]/colT[1]) : '—'}</b>
+            {seeAll ? 'Team' : 'You'}: Lattice <b>{colL[1] ? pct(colL[0]/colL[1]) : '—'}</b> · Timesheets <b>{colT[1] ? pct(colT[0]/colT[1]) : '—'}</b>
           </span>
         </div>
         <div className="scroll">

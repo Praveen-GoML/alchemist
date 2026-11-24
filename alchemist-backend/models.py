@@ -144,3 +144,14 @@ class PushSubscription(Base):
     auth = Column(String, nullable=False)
     user_agent = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class HubState(Base):
+    """Shared hub data (projects, leave, docs, ...). One row per key; `version` makes concurrent edits safe."""
+    __tablename__ = "alchemist_hub_state"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False)  # JSON text
+    version = Column(Integer, nullable=False, default=1)
+    updated_by = Column(String, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)

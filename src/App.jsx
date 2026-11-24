@@ -5,9 +5,11 @@ import LoginPage from './pages/LoginPage';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
+import OnboardingTour from './components/OnboardingTour';
 import { ClientPortal } from './pages/ClientPortal';
 import { CertificateView } from './pages/CertificateView';
 import { initialState } from './data/initialState';
+import { useHubData } from './hooks/useHubData';
 import { mondayOf } from './utils/helpers';
 import './utils/theme';
 import './styles.css';
@@ -16,14 +18,9 @@ import { setStatusBarDim } from './utils/theme';
 
 import SplashScreen from './components/common/SplashScreen';
 function AuthenticatedApp() {
-  const [data, setData] = useState(() => {
-    try {
-      const saved = localStorage.getItem('alchemist-data');
-      return saved ? JSON.parse(saved) : initialState;
-    } catch {
-      return initialState;
-    }
-  });
+  // Shared data: everyone sees the same projects, leave, docs and team (saved on the backend)
+  const { isManagementUser } = useAuth();
+  const { data, updateData, syncStatus } = useHubData(initialState, { canSeed: !!isManagementUser });
 
   const [ui, setUi] = useState(() => {
     try {
@@ -67,24 +64,6 @@ function AuthenticatedApp() {
     return () => { document.body.classList.remove('navopen'); setStatusBarDim(false); };
   }, [navOpen]);
 
-  // Keep other open tabs in sync: when another tab saves, adopt its data.
-  useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key !== 'alchemist-data' || !e.newValue) return;
-      try { setData(JSON.parse(e.newValue)); } catch { /* ignore bad payload */ }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('alchemist-data', JSON.stringify(data));
-    } catch (e) {
-      console.error('Failed to save data:', e);
-    }
-  }, [data]);
-
   // Save UI state to localStorage
   useEffect(() => {
     try {
@@ -111,13 +90,6 @@ function AuthenticatedApp() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const updateData = (updater) => {
-    setData(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      return { ...next, updatedAt: new Date().toISOString() };
-    });
-  };
-
   const toggleCollapse = () => {
     setUi(prev => ({ ...prev, collapsed: !prev.collapsed }));
   };
@@ -134,6 +106,7 @@ function AuthenticatedApp() {
         <TopBar 
           view={ui.view} 
           onMenuClick={() => setNavOpen(prev => !prev)} 
+          syncStatus={syncStatus}
         />
         <MainContent 
           view={ui.view} 
@@ -144,6 +117,7 @@ function AuthenticatedApp() {
           setUi={setUi}
         />
       </div>
+      <OnboardingTour />
       <div 
         className="scrim" 
         onClick={() => setNavOpen(false)} 

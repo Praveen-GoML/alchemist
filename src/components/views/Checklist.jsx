@@ -26,6 +26,7 @@ export default function Checklist({ data, updateData, ui, setUi }) {
   const { clProject, clView='project' } = ui;
   const set = patch => setUi(prev => ({...prev,...patch}));
   const [collapsedPhases, setCollapsedPhases] = useState({});
+  const [mShowAll, setMShowAll] = useState(false);
 
   const togglePhase = phaseKey => {
     setCollapsedPhases(prev => ({
@@ -84,6 +85,97 @@ export default function Checklist({ data, updateData, ui, setUi }) {
   );
 
   const sub = '46 steps from pre-sales to retro. Gate items must be Done or N/A before the kick-off invite goes out.';
+
+  // ── MEMBER view: a read-only, at-a-glance summary of their projects
+  if (!canEdit) {
+    if (!active) return <div className="empty">No projects are assigned to you in the checklist yet.</div>;
+    const ms = clSummary(active, checklist, items);
+    const mst = checklist[active] || {};
+    const mmeta = clMeta[active] || {};
+    const openItems = items.filter(it => !['Done', 'N/A'].includes(mst[it.n] || ''));
+    const doneN = items.filter(it => (mst[it.n] || '') === 'Done').length;
+    const shown = mShowAll ? openItems : openItems.slice(0, 6);
+    const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set';
+    const overallPct = Math.round(ms.overall * 100);
+    const facts = [['Client', mmeta.client || 'Not set'], ['ML combo', mmeta.combo || 'Not set'], ['Kick-off', fmtD(mmeta.kickoff)], ['UAT', fmtD(mmeta.uat)]];
+
+    return (
+      <div className="mcl">
+        {names.length > 1 && (
+          <div className="mcl-tabs" role="tablist">
+            {names.map(n => (
+              <button key={n} type="button" role="tab" aria-selected={n === active}
+                className={n === active ? 'on' : ''} onClick={() => { set({ clProject: n }); setMShowAll(false); }}>{n}</button>
+            ))}
+          </div>
+        )}
+
+        <section className="mcl-hero">
+          <div className="mcl-ring" aria-label={`${overallPct}% complete`}>
+            <svg viewBox="0 0 64 64" focusable="false">
+              <circle className="mcl-ring-track" cx="32" cy="32" r="27" />
+              {overallPct > 0 && <circle className="mcl-ring-arc" cx="32" cy="32" r="27" pathLength="100" strokeDasharray={`${overallPct} 100`} />}
+            </svg>
+            <b>{overallPct}<small>%</small></b>
+          </div>
+          <div className="mcl-heroText">
+            <h2>{active}</h2>
+            <p>Now in <b>{ms.stage}</b> · {doneN} of {items.length} steps done{ms.blocked > 0 ? ` · ${ms.blocked} blocked` : ''}</p>
+            <span className={`mcl-gate${ms.gate ? ' is-open' : ''}`}>{ms.gate ? `Kick-off gate: ${ms.gate} to go` : 'Kick-off gate: ready'}</span>
+          </div>
+          <dl className="mcl-facts">
+            {facts.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
+        </section>
+
+        <ol className="mcl-steps">
+          {PHASES.map((ph, i) => {
+            const p = Math.round(ms.pp[i] * 100);
+            const isNow = ms.stage === ph;
+            return (
+              <li key={ph} className={`${p === 100 ? 'is-done' : ''}${isNow ? ' is-now' : ''}`}>
+                <span className="mcl-dot">{p === 100 ? <CheckCircle2 size={16} /> : i + 1}</span>
+                <b>{ph}</b>
+                <em>{p}%</em>
+                <i><u style={{ width: `${p}%` }} /></i>
+              </li>
+            );
+          })}
+        </ol>
+
+        <section className="mcl-next">
+          <div className="mcl-next-head">
+            <h3>{openItems.length ? 'Up next' : 'All steps complete'}</h3>
+            {openItems.length > 0 && <span>{openItems.length} open</span>}
+          </div>
+          {openItems.length === 0 ? (
+            <p className="mcl-empty">Nothing left on this checklist.</p>
+          ) : (
+            <ul>
+              {shown.map(it => {
+                const v = mst[it.n] || '';
+                return (
+                  <li key={it.n}>
+                    <span className="mcl-n">{it.n}</span>
+                    <span className="mcl-it">
+                      <b>{it.text}{it.gate && <em className="gate" style={{ marginLeft: 8 }}>gate</em>}</b>
+                      <small>{PHASES[it.phase - 1]} · owner {it.owner}</small>
+                    </span>
+                    <span className={`spill c-${slug(v || 'none')}`}>{v || 'Not started'}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {openItems.length > 6 && (
+            <button type="button" className="mcl-more" onClick={() => setMShowAll(v => !v)}>
+              {mShowAll ? 'Show fewer' : `Show all ${openItems.length}`}
+            </button>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   // ── HUB view: all projects × all items
   if (clView === 'hub') {

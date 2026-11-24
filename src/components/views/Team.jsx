@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { COMBO, norm } from '../../utils/helpers';
 import { useAuth } from '../../context/AuthContext';
-import { Zap, Pencil, Copy, Trash2 } from 'lucide-react';
+import { Zap, Pencil, Copy, Trash2, ChevronRight, X } from 'lucide-react';
 
 import { dialog } from '../../utils/dialog';
 import Dropdown from '../common/Dropdown';
@@ -16,7 +16,12 @@ export default function Team({ data, updateData, ui, setUi }) {
   const set = patch => setUi(prev => ({...prev,...patch}));
   const [addOpen, setAddOpen] = useState(false);
   const [mxFilter, setMxFilter] = useState('');
+  const [wlFilter, setWlFilter] = useState('');
+  const [wlSort, setWlSort] = useState('load'); // 'load' | 'name'
+  const [wlBand, setWlBand] = useState(null); // clicked a summary tile to filter: 'free' | 'light' | 'busy' | 'over' | null
+  const [wlOpen, setWlOpen] = useState(() => new Set()); // names whose row is expanded
   const [hideClosed, setHideClosed] = useState(false);
+  const [joinSel, setJoinSel] = useState('');
   const blankPerson = { name:'', role:'', email:'', github:'', skills:'', combo:'', projects:[] };
   const [np, setNp] = useState(blankPerson);
   const [npErr, setNpErr] = useState('');
@@ -108,19 +113,61 @@ export default function Team({ data, updateData, ui, setUi }) {
     }));
   };
 
+  // Shared by the matrix, the workload tab and "My projects": a project's status dot colour
+  const dotFor = st => st === 'Closed' ? '#A39C95' : st === 'Hold' ? '#F2A23A' : st === 'Dev in progress' ? '#3DA56A' : '#4A7CF0';
+
+  // Add/remove one person from one project. Anyone can do this for themselves; PMs/TLs can do it for anyone.
+  const toggleInvolvement = (memberIdx, projectName, memberName, memberEmail) => {
+    if (!canEditTeamInvolvement(memberName, memberEmail)) {
+      alert(`You can only update your own project involvement. PMs and TLs can edit all team members.`);
+      return;
+    }
+    const target = members[memberIdx];
+    if (target && !isOwnMember(target.name, target.email)) {
+      const had = (target.projects || []).some(x => norm(x) === norm(projectName));
+      notifyAssignment({ actor: user?.name, project: projectName, people: [target], removed: had });
+    }
+    updateData(prev => {
+      const ms = [...prev.members];
+      const m = {...ms[memberIdx]};
+      const has = m.projects.some(p => norm(p) === norm(projectName));
+      m.projects = has
+        ? m.projects.filter(p => norm(p) !== norm(projectName))
+        : [...m.projects, projectName];
+      ms[memberIdx] = m;
+      return {...prev, members: ms};
+    });
+  };
+
   const renderPeople = () => {
     const q = teamFilter.toLowerCase();
     const filtered = members.filter(m =>
       !q || (m.name+' '+m.role+' '+m.skills+' '+m.combo).toLowerCase().includes(q)
     );
 
+    // group by role category, in a fixed order
+    const categoryOf = (role = '') =>
+      /^(pm|lead)\b/i.test(role) ? 'Leadership'
+      : /\bml\b/i.test(role) ? 'ML & AI'
+      : /\bfe\b.*\bbe\b|\bbe\b.*\b(fe|react)\b|react.*\bbe\b|full/i.test(role) ? 'Full-stack'
+      : /\bfe\b|front|react|angular/i.test(role) ? 'Frontend'
+      : /\bbe\b|backend|python|java|node/i.test(role) ? 'Backend'
+      : /^de\b|data/i.test(role) ? 'Data' : 'Others';
+    const ORDER = ['Leadership', 'ML & AI', 'Backend', 'Frontend', 'Full-stack', 'Data', 'Others'];
+    const groups = ORDER
+      .map(key => ({ key, items: filtered.filter(m => categoryOf(m.role) === key) }))
+      .filter(g => g.items.length);
+
     return (
       <>
         <input className="search" type="search" placeholder="Search name, role or skill"
           value={teamFilter} onChange={e => set({teamFilter:e.target.value})}
           aria-label="Search team" />
+        {groups.map(g => (
+        <section key={g.key} className="people-group" aria-label={g.key}>
+        <h3 className="people-group-head"><span>{g.key}</span><b>{g.items.length}</b></h3>
         <div className="people">
-          {filtered.map(m => {
+          {g.items.map(m => {
             const active = m.projects.filter(p => {
               const mp = matrixProjects.find(x => norm(x.name) === norm(p));
               return !mp || mp.status !== 'Closed';
@@ -225,6 +272,9 @@ export default function Team({ data, updateData, ui, setUi }) {
             );
           })}
         </div>
+        </section>
+        ))}
+        {groups.length === 0 && <p className="wl-none" style={{ padding: '26px 0', textAlign: 'center' }}>No one matches that search.</p>}
       </>
     );
   };
@@ -327,7 +377,174 @@ export default function Team({ data, updateData, ui, setUi }) {
     </>
   );
 
-  // Matrix view
+  // Workload: how many active projects each person carries, pulled from the project matrix
+  const renderWorkload = () => {
+    const activeOf = (m) => m.projects
+      .map(pn => matrixProjects.find(x => norm(x.name) === norm(pn)))
+      .filter(mp => mp && mp.status !== 'Closed');
+    const band = (n) => n === 0 ? 'free' : n <= 2 ? 'light' : n <= 4 ? 'busy' : 'over';
+    const BAND = {
+      free: { label: 'Free', short: 'Free', hint: 'No active projects' },
+      light: { label: 'Light load', short: 'Light', hint: '1–2 active projects' },
+      busy: { label: 'Busy', short: 'Busy', hint: '3–4 active projects' },
+      over: { label: 'Overloaded', short: 'Over', hint: '5+ active projects' },
+    };
+    const BAND_ORDER = ['free', 'light', 'busy', 'over'];
+    const BAND_SPAN = { free: '1 / 2', light: '2 / 4', busy: '4 / 6', over: '6 / 8' };
+    const METER_SCALE = 6; // six capacity slots per person; anything past six gets an outer ring
+
+    const goToProject = (name) => { set({ pq: name }); window.location.hash = '#projects'; };
+    const goToMatrix = (name) => { setMxFilter(name); set({ teamView: 'matrix' }); };
+    const removeFromProject = (m, projectName) => {
+      if (!canEditTeamInvolvement(m.name, m.email)) return;
+      const mi = members.findIndex(x => x.name === m.name);
+      if (mi < 0) return;
+      if (!isOwnMember(m.name, m.email)) notifyAssignment({ actor: user?.name, project: projectName, people: [m], removed: true });
+      updateData(prev => {
+        const ms = [...prev.members];
+        ms[mi] = { ...ms[mi], projects: ms[mi].projects.filter(p => norm(p) !== norm(projectName)) };
+        return { ...prev, members: ms };
+      });
+    };
+
+    const q = wlFilter.trim().toLowerCase();
+    const pool = members
+      .filter(m => !q || (m.name + ' ' + m.role).toLowerCase().includes(q))
+      .map(m => { const active = activeOf(m); return { m, active, n: active.length, b: band(active.length) }; });
+    const counts = { free: 0, light: 0, busy: 0, over: 0 };
+    pool.forEach(r => { counts[r.b]++; });
+    const loadCounts = Array.from({ length: 7 }, (_, n) => pool.filter(r => Math.min(r.n, 6) === n).length);
+    const peak = Math.max(1, ...loadCounts);
+    const total = pool.length;
+    const axisMax = Math.max(6, ...pool.map(r => r.n));
+    const axisStep = axisMax > 12 ? 4 : axisMax > 8 ? 2 : 1;
+    const axisTicks = Array.from({ length: Math.floor(axisMax / axisStep) + 1 }, (_, i) => i * axisStep);
+    const overCount = counts.over;
+    const sorted = pool.slice().sort(wlSort === 'name'
+      ? (a, b) => a.m.name.localeCompare(b.m.name)
+      : (a, b) => b.n - a.n || a.m.name.localeCompare(b.m.name));
+    const rows = wlBand ? sorted.filter(r => r.b === wlBand) : sorted;
+    const toggleExpand = (name) => setWlOpen(prev => { const next = new Set(prev); next.has(name) ? next.delete(name) : next.add(name); return next; });
+
+    return (
+      <div className="wl3">
+        <section className="wl3-top" aria-labelledby="wl3-title">
+          <div className="wl3-intro">
+            <h2 id="wl3-title">Team capacity</h2>
+            <p>
+              {total === 0
+                ? 'No one matches the current search.'
+                : overCount > 0
+                  ? <><b>{overCount} of {total}</b> {total === 1 ? 'person is' : 'people are'} over capacity — five or more active projects.</>
+                  : <>No one is over capacity right now. The busiest person carries {sorted[0]?.n ?? 0} active {sorted[0]?.n === 1 ? 'project' : 'projects'}.</>}
+            </p>
+          </div>
+
+          {total > 0 && (
+            <div className="wl3-figure">
+              <div className="wl3-hist" role="img"
+                aria-label={loadCounts.map((c, n) => `${c} ${c === 1 ? 'person' : 'people'} with ${n === 6 ? 'six or more' : n} active ${n === 1 ? 'project' : 'projects'}`).join('; ')}>
+                {loadCounts.map((c, n) => (
+                  <span key={n} className={`wl3-col wl3-b-${band(n)}`}>
+                    <span className="wl3-col-count">{c}</span>
+                    <span className="wl3-col-track">
+                      <i style={{ height: c ? `${Math.max(9, (c / peak) * 100)}%` : 0 }} />
+                    </span>
+                    <span className="wl3-col-x">{n === 6 ? '6+' : n}</span>
+                  </span>
+                ))}
+              </div>
+              <div className="wl3-brackets" role="group" aria-label="Filter by capacity band">
+                {BAND_ORDER.map(k => (
+                  <button key={k} type="button"
+                    className={`wl3-bracket wl3-b-${k}${wlBand === k ? ' is-on' : ''}`}
+                    style={{ gridColumn: BAND_SPAN[k] }}
+                    onClick={() => setWlBand(cur => cur === k ? null : k)}
+                    aria-pressed={wlBand === k}
+                    aria-label={`${BAND[k].label}: ${counts[k]} ${counts[k] === 1 ? 'person' : 'people'}`}
+                    title={`${BAND[k].label} · ${BAND[k].hint}`}>
+                    <span>{BAND[k].short}</span><b>{counts[k]}</b>
+                  </button>
+                ))}
+              </div>
+              <span className="wl3-hist-x">active projects per person</span>
+            </div>
+          )}
+        </section>
+
+        <div className="wl3-tools">
+          <input className="search" type="search" placeholder="Find a person or role"
+            value={wlFilter} onChange={e => setWlFilter(e.target.value)} aria-label="Filter workload by person" />
+          <div className="wl-sort" role="group" aria-label="Sort workload">
+            <button type="button" className={wlSort === 'load' ? 'on' : ''} onClick={() => setWlSort('load')}>Busiest first</button>
+            <button type="button" className={wlSort === 'name' ? 'on' : ''} onClick={() => setWlSort('name')}>By name</button>
+          </div>
+        </div>
+
+        <div className="wl3-caption">
+          <span>One bar per person, counting active projects. The red zone is five or more. Click a row to see the projects.</span>
+          {wlBand && <button type="button" className="wl3-clear" onClick={() => setWlBand(null)}>Show everyone</button>}
+        </div>
+
+        <div className="wl3-axisrow" aria-hidden="true" style={{ '--max': axisMax }}>
+          <span className="wl3-axis-title">Active projects</span>
+          <span className="wl3-chart"><span className="wl3-area wl3-ticks">
+            {axisTicks.map(t => <em key={t} style={{ left: `${(t / axisMax) * 100}%` }}>{t}</em>)}
+          </span></span>
+        </div>
+
+        <ul className="wl3-rows">
+          {rows.map(({ m, active, n, b }) => {
+            const open = wlOpen.has(m.name);
+            const canManage = canEditTeamInvolvement(m.name, m.email);
+            return (
+              <li key={m.name} className={`wl3-row wl3-b-${b}${open ? ' is-open' : ''}${m.inactive ? ' is-inactive' : ''}`}>
+                <button type="button" className="wl3-row-main" onClick={() => toggleExpand(m.name)} aria-expanded={open}
+                  aria-label={`${m.name}, ${n} active ${n === 1 ? 'project' : 'projects'}, ${BAND[b].label}. ${open ? 'Collapse' : 'Expand'} details`}
+                  onContextMenu={(e) => { e.preventDefault(); setPctx({ x: e.clientX, y: e.clientY, m }); }}>
+                  <span className="wl3-who">
+                    <b>{m.name}{isOwnMember(m.name, m.email) && <em className="wl3-you">You</em>}</b>
+                    <span>{m.role}</span>
+                  </span>
+                  <span className="wl3-chart" aria-hidden="true" style={{ '--max': axisMax }}>
+                    <span className="wl3-area">
+                      {n > 0 && <i className="wl3-gbar" style={{ width: `${(n / axisMax) * 100}%` }} />}
+                    </span>
+                    <b className="wl3-gval" style={{ left: `calc((100% - 34px) * ${n / axisMax} + 8px)` }}>{n}</b>
+                  </span>
+                  <span className={`wl3-tag wl3-tag-${b}`}><i />{BAND[b].label}</span>
+                  <span className="wl3-chev"><ChevronRight size={16} /></span>
+                </button>
+
+                <div className="wl3-detail" style={{ gridTemplateRows: open ? '1fr' : '0fr' }}>
+                  <div className="wl3-detail-in">
+                    {active.length > 0 ? (
+                      <ul className="wl3-plist">
+                        {active.map(p => (
+                          <li key={p.name}>
+                            <i style={{ background: dotFor(p.status) }} />
+                            <button type="button" className="wl3-plink" onClick={() => goToProject(p.name)} title={`Open ${p.name} in Projects`}>{p.name}</button>
+                            <span className="wl3-pstatus">{p.status}</span>
+                            {canManage && (
+                              <button type="button" className="wl3-premove" title={`Remove ${m.name} from ${p.name}`} aria-label={`Remove from ${p.name}`}
+                                onClick={() => removeFromProject(m, p.name)}><X size={13} /></button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="wl-none" style={{ margin: '4px 0 10px' }}>Not on any active project right now.</p>}
+                    {canEdit && <button type="button" className="wl3-matrixlink" onClick={() => goToMatrix(m.name)}>View in project matrix <ChevronRight size={14} /></button>}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {rows.length === 0 && <p className="wl-none" style={{ padding: '26px 0', textAlign: 'center' }}>No one matches that filter.</p>}
+      </div>
+    );
+  };
+
   const renderMatrix = () => {
     const statusOptions = ['Proposal Review','Pre-requisite','Arch Development','Dev in progress','Hold','Closed'];
 
@@ -462,13 +679,81 @@ export default function Team({ data, updateData, ui, setUi }) {
     );
   };
 
+  // Member view of "Project matrix": not the whole-team grid, just their own projects and who else is on them
+  const renderMyProjects = () => {
+    const me = members.find(m => isOwnMember(m.name, m.email));
+    if (!me) {
+      return <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>You are not listed as a team member yet. Ask a PM or TL to add you.</p>;
+    }
+    const active = me.projects
+      .map(pn => matrixProjects.find(x => norm(x.name) === norm(pn)))
+      .filter(mp => mp && mp.status !== 'Closed');
+    const teammatesOn = (projectName) => members.filter(x => x.name !== me.name && x.projects.some(p => norm(p) === norm(projectName)));
+    const initialsOf = (name) => name.split(' ').map(w => w[0]).slice(0, 2).join('');
+
+    return (
+      <>
+        <div className="mypj-hero">
+          <div>
+            <h2>My projects</h2>
+            <p>The projects you're currently active on.</p>
+          </div>
+          <div className="mypj-stats">
+            <span><b>{active.length}</b>{active.length === 1 ? 'project' : 'projects'}</span>
+            <span><b>{new Set(active.flatMap(p => teammatesOn(p.name).map(t => t.name))).size}</b>teammates</span>
+          </div>
+        </div>
+
+        {active.length > 0 ? (
+          <div className="mypj-grid">
+            {active.map(p => (
+              <div key={p.name} className="mypj-card">
+                <div className="mypj-head">
+                  <b>{p.name}</b>
+                  <span className="mypj-status"><i style={{ background: dotFor(p.status) }} />{p.status}</span>
+                </div>
+                {(() => {
+                  const mates = teammatesOn(p.name);
+                  return mates.length > 0 ? (
+                    <div className="mypj-chips">
+                      {mates.map(t => (
+                        <span key={t.name} className="mypj-chip" title={`${t.name} · ${t.role}`}>
+                          <span className="mypj-av">{initialsOf(t.name)}</span>
+                          <span className="mypj-chipname">{t.name}<small>{t.role}</small></span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : <p className="wl-none" style={{ margin: 0 }}>Just you so far.</p>;
+                })()}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="wl-none" style={{ padding: '18px 0' }}>You are not marked as active on any project yet.</p>
+        )}
+      </>
+    );
+  };
+
+  // Workload is for PMs/TLs only; ML combos for PMs/TLs and people in ML roles
+  const me = members.find(m => isOwnMember(m.name, m.email));
+  const isML = !!me && /ml/i.test(me.role || '');
+  const canSeeCombos = canEdit || isML;
+  const tabs = [
+    ['people', 'People'],
+    ...(canEdit ? [['workload', 'Workload']] : []),
+    ...(canSeeCombos ? [['combos', 'ML combos']] : []),
+    ['matrix', canEdit ? 'Project matrix' : 'My projects'],
+  ];
+  const view = tabs.some(([v]) => v === teamView) ? teamView : 'people';
+
   return (
     <div>
       <p className="hint">{members.length} people across PM, lead, ML, backend, frontend and data.</p>
       <div className="toolbar">
         <div className="seg">
-          {[['people','People'],['combos','ML combos'],['matrix','Project matrix']].map(([v,l]) => (
-            <button key={v} className={teamView===v?'on':''} onClick={() => set({teamView:v})}>{l}</button>
+          {tabs.map(([v,l]) => (
+            <button key={v} className={view===v?'on':''} onClick={() => set({teamView:v})}>{l}</button>
           ))}
         </div>
         {canEdit && (
@@ -533,9 +818,10 @@ export default function Team({ data, updateData, ui, setUi }) {
           onSave={(patch) => savePerson(editing.m, patch)}
         />
       )}
-      {teamView==='people' && renderPeople()}
-      {teamView==='combos' && renderCombos()}
-      {teamView==='matrix' && renderMatrix()}
+      {view==='people' && renderPeople()}
+      {view==='workload' && renderWorkload()}
+      {view==='combos' && renderCombos()}
+      {view==='matrix' && (canEdit ? renderMatrix() : renderMyProjects())}
     </div>
   );
 }
