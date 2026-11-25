@@ -13,7 +13,7 @@ import { ClientPortal } from '../pages/ClientPortal';
 import { CertificateView } from '../pages/CertificateView';
 import { SkeletonView } from './common/Skeleton';
 
-function MainContent({ view, param, data, updateData, ui, setUi }) {
+function MainContent({ view, param, data, updateData, ui, setUi, syncStatus }) {
   const [skelView, setSkelView] = useState(null); // the view being "loaded"
   const [showSkeleton, setShowSkeleton] = useState(false);
   const prevView = useRef(view);
@@ -28,7 +28,13 @@ function MainContent({ view, param, data, updateData, ui, setUi }) {
     // Pre-req loads real data and shows its own skeleton; a second one would just flash
     if (view === 'prereq') { setShowSkeleton(false); return; }
 
-    // Show skeleton for 500ms when switching views
+    // Team/project/leave/etc. data all comes from the one shared hub blob (useHubData), loaded
+    // once and kept in memory from then on — so once it has arrived (anything but the very
+    // first 'loading'), switching back to an already-visited view has nothing left to wait for.
+    // Flashing a skeleton here would be theater, not a real loading state, so skip it.
+    if (syncStatus !== 'loading') { setShowSkeleton(false); return; }
+
+    // First-ever load: the shared data hasn't arrived yet, so this skeleton is real.
     clearTimeout(timerRef.current);
     setSkelView(view);
     setShowSkeleton(true);
@@ -38,7 +44,7 @@ function MainContent({ view, param, data, updateData, ui, setUi }) {
     }, 500);
 
     return () => clearTimeout(timerRef.current);
-  }, [view]);
+  }, [view, syncStatus]);
 
   const renderView = () => {
     switch (view) {

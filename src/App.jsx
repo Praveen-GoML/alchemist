@@ -108,13 +108,14 @@ function AuthenticatedApp() {
           onMenuClick={() => setNavOpen(prev => !prev)} 
           syncStatus={syncStatus}
         />
-        <MainContent 
-          view={ui.view} 
+        <MainContent
+          view={ui.view}
           param={ui.param}
-          data={data} 
+          data={data}
           updateData={updateData}
           ui={ui}
           setUi={setUi}
+          syncStatus={syncStatus}
         />
       </div>
       <OnboardingTour />
