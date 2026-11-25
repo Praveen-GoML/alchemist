@@ -15,6 +15,10 @@
     --accent-ink: #fff;
     --accent-soft: #FDEEE2;
     --accent-text: #E0761A;
+    /* a darker shade of --accent for small/bold white-on-accent chips and badges,
+       so their text keeps WCAG AA contrast (4.5:1) instead of the ~2.4:1 that
+       white text gets directly on --accent */
+    --accent-strong: color-mix(in srgb, var(--accent) 65%, black);
     --warm: #EAD3BC;
     --ok: #3E9B5C;
     --behind: #D4880A;
