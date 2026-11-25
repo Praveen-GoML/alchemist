@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
-import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing } from 'lucide-react';
+import { Bell, CalendarDays, UserPlus, Info, Check, X, BellRing, BellOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { AUTH_API_URL } from '../apiConfig';
-import { pushSupport, currentSubscription, enableDeviceNotifications, disableDeviceNotifications, resyncIfAllowed, sendTestNotification } from '../services/push';
+import { pushSupport, currentSubscription, enableDeviceNotifications, resyncIfAllowed } from '../services/push';
 
 const KIND = {
   leave: { Icon: CalendarDays, tone: 'leave' },
@@ -31,8 +32,8 @@ export default function NotificationBell() {
   const support = pushSupport();
   const [perm, setPerm] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'denied'));
   const [deviceOn, setDeviceOn] = useState(false);
-  const [deviceBusy, setDeviceBusy] = useState(false);
-  const [deviceMsg, setDeviceMsg] = useState('');
+  const enableMutation = useMutation({ mutationFn: enableDeviceNotifications });
+  const deviceBusy = enableMutation.isPending;
   const [askBanner, setAskBanner] = useState(false);
   const deviceOnRef = useRef(false);
   deviceOnRef.current = deviceOn;
@@ -97,34 +98,34 @@ export default function NotificationBell() {
   };
 
   const turnOnDevice = async () => {
-    setDeviceBusy(true); setDeviceMsg('');
+    setDeviceMsg('');
     try {
-      await enableDeviceNotifications();
+      await enableMutation.mutateAsync();
       setDeviceOn(true);
       setPerm(Notification.permission);
       dismissAsk();
     } catch (err) {
       setDeviceMsg(err.message || 'Could not turn on device notifications.');
       if (typeof Notification !== 'undefined') setPerm(Notification.permission);
-    } finally { setDeviceBusy(false); }
+    }
   };
 
   const sendTest = async () => {
-    setDeviceBusy(true); setDeviceMsg('');
+    setDeviceMsg('');
     try {
-      const r = await sendTestNotification();
+      const r = await testMutation.mutateAsync();
       setDeviceMsg(r.devices === 0
         ? 'No device is registered for your account yet. Press Turn on on the device you want.'
         : r.pushed === 0 ? 'Your device did not accept it. Turn notifications off and on again.'
         : `Sample sent to ${r.pushed} ${r.pushed === 1 ? 'device' : 'devices'}. It should appear in a few seconds.`);
     } catch {
       setDeviceMsg('Could not send the sample. Check your connection and try again.');
-    } finally { setDeviceBusy(false); }
+    }
   };
 
   const turnOffDevice = async () => {
-    setDeviceBusy(true); setDeviceMsg('');
-    try { await disableDeviceNotifications(); setDeviceOn(false); } finally { setDeviceBusy(false); }
+    setDeviceMsg('');
+    try { await disableMutation.mutateAsync(); setDeviceOn(false); } catch { /* the button stays as it was */ }
   };
 
   const shown = tab === 'unread' ? items.filter(n => !n.read_at) : items;

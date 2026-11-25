@@ -5,7 +5,6 @@
 //   part of the payload (the backend strips them).
 // ======================================================================
 
-import { API_URL } from '../apiConfig';
 import { renderBrd } from './aiContextBuilder';
 
 export const CONTEXT_SECTIONS = [
@@ -20,12 +19,6 @@ export const CONTEXT_SECTIONS = [
   { key: 'brd', label: 'Business Requirements Doc', hint: '27-section BRD (long)', on: true },
   { key: 'proposal', label: 'Source proposal text', hint: 'Original SOW text (very long)', on: false },
 ];
-
-export async function fetchProjectContext(projectId) {
-  const res = await fetch(`${API_URL}/projects/${projectId}/context`);
-  if (!res.ok) throw new Error(`Could not load project context (HTTP ${res.status}).`);
-  return res.json();
-}
 
 const val = (v, fallback = 'Not specified') =>
   v === null || v === undefined || String(v).trim() === '' ? fallback : String(v).trim();

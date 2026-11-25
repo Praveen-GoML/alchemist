@@ -1,4 +1,6 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keys } from '../api/keys';
 
 import { clearSession } from '../utils/session';
 import { forgetDeviceOnServer } from '../services/push';
@@ -8,87 +10,101 @@ const AuthContext = createContext();
 
 const API_BASE_URL = (import.meta.env.VITE_AUTH_API_URL || (import.meta.env.DEV ? 'http://localhost:8001' : '')).replace(/\/+$/, '');
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+const readCachedUser = () => {
+  try { return JSON.parse(localStorage.getItem('alchemist_user')); } catch { return null; }
+};
 
-  useEffect(() => {
-    // Trust the server, not localStorage: validate the token and use the role it returns.
-    const token = localStorage.getItem('alchemist_token');
-    if (!token || !API_BASE_URL) {
-      if (token) clearSession();
-      setLoading(false);
-      return;
+/** Asks the server who this token belongs to. Resolves the user, or null when the token is no longer valid. */
+async function fetchMe(token) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      const me = await res.json();
+      localStorage.setItem('alchemist_user', JSON.stringify(me));
+      return me;
     }
-    let cancelled = false;
-    fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (res) => {
-        if (cancelled) return;
-        if (res.ok) {
-          const me = await res.json();
-          localStorage.setItem('alchemist_user', JSON.stringify(me));
-          setUser(me);
-        } else if (res.status === 401 || res.status === 403) {
-          clearSession();
-        } else {
-          // Server error: fall back to cached profile but keep the token for retry
-          try { setUser(JSON.parse(localStorage.getItem('alchemist_user'))); } catch { clearSession(); }
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        try { setUser(JSON.parse(localStorage.getItem('alchemist_user'))); } catch { clearSession(); }
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+    if (res.status === 401 || res.status === 403) { clearSession(); return null; }
+    // Server error: fall back to the cached profile but keep the token for a retry
+    return readCachedUser();
+  } catch {
+    return readCachedUser();
+  }
+}
 
-  const login = async (email, password) => {
-    if (!API_BASE_URL) {
-      throw new Error('Authentication backend is not configured. Set VITE_AUTH_API_URL in the frontend deployment.');
-    }
+async function postLogin(email, password) {
+  if (!API_BASE_URL) {
+    throw new Error('Authentication backend is not configured. Set VITE_AUTH_API_URL in the frontend deployment.');
+  }
 
-    let response;
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, username: email, password })
+    });
+  } catch (networkErr) {
+    throw new Error(`Cannot connect to backend server at ${API_BASE_URL}. Is the backend running?`);
+  }
+
+  if (!response.ok) {
+    let errorMessage = 'Login failed';
     try {
-      response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, username: email, password })
-      });
-    } catch (networkErr) {
-      throw new Error(`Cannot connect to backend server at ${API_BASE_URL}. Is the backend running?`);
-    }
-
-    if (!response.ok) {
-      let errorMessage = 'Login failed';
-      try {
-        const error = await response.json();
-        if (typeof error.detail === 'string') {
-          errorMessage = error.detail;
-        } else if (Array.isArray(error.detail)) {
-          errorMessage = error.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
-      } catch (_) {
-        errorMessage = `Login failed (${response.status}: ${response.statusText})`;
+      const error = await response.json();
+      if (typeof error.detail === 'string') {
+        errorMessage = error.detail;
+      } else if (Array.isArray(error.detail)) {
+        errorMessage = error.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (error.message) {
+        errorMessage = error.message;
       }
-      throw new Error(errorMessage);
+    } catch (_) {
+      errorMessage = `Login failed (${response.status}: ${response.statusText})`;
     }
+    throw new Error(errorMessage);
+  }
 
-    const data = await response.json();
-    localStorage.setItem('alchemist_token', data.access_token);
-    localStorage.setItem('alchemist_user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
-  };
+  return response.json();
+}
+
+export const AuthProvider = ({ children }) => {
+  const queryClient = useQueryClient();
+  // Was there a saved session when the app opened? Only then do we need to ask the server who it is.
+  const [bootToken] = useState(() => { try { return localStorage.getItem('alchemist_token'); } catch { return null; } });
+  const [checkSession, setCheckSession] = useState(!!bootToken && !!API_BASE_URL);
+  if (bootToken && !API_BASE_URL) clearSession(); // a token with no server to check it against is not trusted
+
+  // Trust the server, not localStorage: validate the token and use the role it returns.
+  const meQuery = useQuery({
+    queryKey: keys.auth.me,
+    queryFn: () => fetchMe(bootToken),
+    enabled: checkSession,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const user = meQuery.data ?? null;
+  const loading = checkSession && meQuery.isPending;
+
+  const loginMutation = useMutation({
+    mutationFn: ({ email, password }) => postLogin(email, password),
+    onSuccess: (data) => {
+      localStorage.setItem('alchemist_token', data.access_token);
+      localStorage.setItem('alchemist_user', JSON.stringify(data.user));
+      queryClient.setQueryData(keys.auth.me, data.user);
+    },
+  });
+
+  const login = async (email, password) => (await loginMutation.mutateAsync({ email, password })).user;
 
   const [portalMode, setPortalMode] = useState('auto'); // 'auto', 'management', 'member'
 
   const logout = () => {
     forgetDeviceOnServer(localStorage.getItem('alchemist_token'));
     clearSession();
-    setUser(null);
+    setCheckSession(false); // do not re-check the old token after signing out
+    queryClient.clear(); // nothing from this person's session may linger for the next one
     setPortalMode('auto');
   };
 

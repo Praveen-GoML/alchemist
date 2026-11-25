@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keys as queryKeys } from '../api/keys';
 import { syncAvailable, fetchAll, fetchVersions, fetchKeys, putKey, seed } from '../services/hubSync';
 
 /**
@@ -11,6 +13,12 @@ import { syncAvailable, fetchAll, fetchVersions, fetchKeys, putKey, seed } from 
  * - If two people change the same row at once, the later save is re-applied on top of the newer
  *   server copy (the original edit functions are replayed), so nothing is silently lost.
  * - The latest copy is kept in localStorage as a cache so the app opens instantly and works offline.
+ *
+ * Network work goes through TanStack Query:
+ *   useQuery    first load (seeds an empty server) and the 12-second "what changed?" poll
+ *   useMutation saving one row at a time
+ * Everything else (the instant local copy, the replay of edits after a conflict) stays here,
+ * because that is application logic, not server state.
  */
 const CACHE_KEY = 'alchemist-data';
 const SHARDED = new Set(['leave', 'hygiene', 'checklist', 'projectDocs', 'clMeta']);
@@ -85,9 +93,13 @@ export function useHubData(initialState, { canSeed = true } = {}) {
   const timer = useRef(null);
   const flushing = useRef(false);
   const ready = useRef(!syncAvailable());
+  const [readyState, setReadyState] = useState(!syncAvailable());   // same flag as `ready`, but it can switch queries on
   const alive = useRef(true);
-  const waitingSeed = useRef(false);
-  const loadRef = useRef(null);
+  const queryClient = useQueryClient();
+
+  const saveMutation = useMutation({
+    mutationFn: ({ key, value, baseVersion }) => putKey(key, value, baseVersion),
+  });
 
   const commit = useCallback((next) => {
     dataRef.current = next;
@@ -107,7 +119,7 @@ export function useHubData(initialState, { canSeed = true } = {}) {
           attempt += 1;
           const value = getKey(dataRef.current, key);
           const b = base.current.get(key);
-          const res = await putKey(key, value === undefined ? null : value, b ? b.version : 0);
+          const res = await saveMutation.mutateAsync({ key, value: value === undefined ? null : value, baseVersion: b ? b.version : 0 });
           if (!res.conflict) {
             base.current.set(key, { json: json(value), version: res.version });
             dirty.current.delete(key);
@@ -133,7 +145,7 @@ export function useHubData(initialState, { canSeed = true } = {}) {
     } finally {
       flushing.current = false;
     }
-  }, [commit]);
+  }, [commit, saveMutation]);
 
   const schedule = useCallback(() => {
     if (!ready.current) return;
@@ -170,57 +182,86 @@ export function useHubData(initialState, { canSeed = true } = {}) {
     commit(next);
   }, [commit]);
 
-  const refresh = useCallback(async () => {
-    if (waitingSeed.current) { loadRef.current?.(); return; }
-    if (!ready.current || flushing.current) return;
-    try {
-      const versions = await fetchVersions();
-      const stale = Object.keys(versions).filter(k => !dirty.current.has(k) && (base.current.get(k)?.version ?? -1) !== versions[k]);
-      if (stale.length) applyServer(await fetchKeys(stale));
-      if (!dirty.current.size && alive.current) setStatus('synced');
-    } catch {
-      if (alive.current) setStatus('offline');
-    }
-  }, [applyServer]);
+  /* First load: a query. An empty server is set up by the first PM/TL (never overwriting anything);
+     a member who arrives earlier waits, and the query quietly re-asks every poll until someone has. */
+  const loadQuery = useQuery({
+    queryKey: queryKeys.hub.all,
+    enabled: syncAvailable(),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => (query.state.data?.waiting ? POLL_MS : false),
+    queryFn: async () => {
+      let items = await fetchAll();
+      if (!Object.keys(items).length) {
+        if (!canSeed) return { waiting: true, items: {} };
+        const m = toKeys(dataRef.current);
+        const seedItems = {}; m.forEach((v, k) => { seedItems[k] = v === undefined ? null : v; });
+        await seed(seedItems);
+        items = await fetchAll();
+      }
+      return { waiting: false, items };
+    },
+  });
+
+  useEffect(() => {
+    const res = loadQuery.data;
+    if (!res) return;
+    if (res.waiting) { setStatus('loading'); return; }
+    base.current = new Map(Object.entries(res.items).map(([k, { value, version }]) => [k, { json: json(value), version }]));
+    commit({ ...assemble(res.items, initialState), updatedAt: new Date().toISOString() });
+    ready.current = true;
+    setReadyState(true);
+    setStatus('synced');
+    if (dirty.current.size) schedule();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (!loadQuery.isError) return;
+    ready.current = true; setReadyState(true); setStatus('offline'); // keep working from the cached copy
+  }, [loadQuery.isError]);
+
+  /* The "what changed?" poll: a query that asks for the version numbers every 12 s (and when you come back to the tab). */
+  const versionsQuery = useQuery({
+    queryKey: queryKeys.hub.versions,
+    queryFn: fetchVersions,
+    enabled: syncAvailable() && readyState,
+    refetchInterval: POLL_MS,
+    refetchOnWindowFocus: 'always',
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+
+  useEffect(() => {
+    const versions = versionsQuery.data;
+    if (!versions || flushing.current) return undefined;
+    const stale = Object.keys(versions).filter(k => !dirty.current.has(k) && (base.current.get(k)?.version ?? -1) !== versions[k]);
+    let cancelled = false;
+    (async () => {
+      try {
+        if (stale.length) {
+          const fetched = await queryClient.fetchQuery({ queryKey: queryKeys.hub.keys(stale), queryFn: () => fetchKeys(stale), staleTime: 0, gcTime: 0 });
+          if (!cancelled) applyServer(fetched);
+        }
+        if (!cancelled && !dirty.current.size) setStatus('synced');
+      } catch {
+        if (!cancelled) setStatus('offline');
+      }
+    })();
+    return () => { cancelled = true; };
+    // dataUpdatedAt (not data): the same version numbers still need re-checking against our unsaved edits
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versionsQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (versionsQuery.isError) setStatus('offline');
+  }, [versionsQuery.isError, versionsQuery.errorUpdatedAt]);
 
   useEffect(() => {
     alive.current = true;
-    if (!syncAvailable()) return undefined;
-    const load = async () => {
-      try {
-        let items = await fetchAll();
-        if (!Object.keys(items).length) {
-          if (!canSeed) { waitingSeed.current = true; if (alive.current) setStatus('loading'); return; } // wait for a PM or TL to set things up
-          // first run: the very first PM/TL in puts the current data on the server (never overwrites)
-          const m = toKeys(dataRef.current);
-          const seedItems = {}; m.forEach((v, k) => { seedItems[k] = v === undefined ? null : v; });
-          await seed(seedItems);
-          items = await fetchAll();
-        }
-        if (!alive.current) return;
-        waitingSeed.current = false;
-        base.current = new Map(Object.entries(items).map(([k, { value, version }]) => [k, { json: json(value), version }]));
-        commit({ ...assemble(items, initialState), updatedAt: new Date().toISOString() });
-        ready.current = true;
-        setStatus('synced');
-        if (dirty.current.size) schedule();
-      } catch {
-        if (alive.current) { ready.current = true; setStatus('offline'); } // keep working from the cached copy
-      }
-    };
-    loadRef.current = load;
-    load();
-    const id = setInterval(refresh, POLL_MS);
-    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      alive.current = false;
-      clearInterval(id); clearTimeout(timer.current);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { alive.current = false; clearTimeout(timer.current); };
   }, []);
 
   // save before the tab closes if something is waiting

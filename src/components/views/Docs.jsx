@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { safeUrl } from '../../utils/safeUrl';
+import { useMutation } from '@tanstack/react-query';
 import { norm } from '../../utils/helpers';
 import { 
   FolderPlus, 
@@ -64,7 +64,9 @@ export default function Docs({ data, updateData }) {
   // Modal / Add form state
   const [isAddingDoc, setIsAddingDoc] = useState(false);
   const [addMode, setAddMode] = useState('upload'); // 'upload' or 'link'
-  const [isUploading, setIsUploading] = useState(false);
+  // the upload is a mutation: TanStack Query tracks whether it is in flight
+  const uploadMutation = useMutation({ mutationFn: ({ project, file }) => uploadProjectFile(project, file) });
+  const isUploading = uploadMutation.isPending;
   const [viewing, setViewing] = useState(null); // the document open in the in-page viewer
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -98,11 +100,10 @@ export default function Docs({ data, updateData }) {
       return;
     }
 
-    setIsUploading(true);
     setUploadError('');
 
     try {
-      const res = await uploadProjectFile(selectedProject, selectedFile);
+      const res = await uploadMutation.mutateAsync({ project: selectedProject, file: selectedFile });
       
       // Auto-detect whether this is an Excel file or BRD document
       const isExcel = ['.xlsx', '.xls', '.csv'].includes(fileExt);
@@ -142,8 +143,6 @@ export default function Docs({ data, updateData }) {
     } catch (err) {
       console.error(err);
       setUploadError(err.message || 'Upload failed. Check file size or connection.');
-    } finally {
-      setIsUploading(false);
     }
   };
 

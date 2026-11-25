@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from '../api/client';
+import { apiError, useProject, useChecklist, useUpdateItem } from '../api/preq';
 import {
   CheckCircle2, Clock, Upload, ArrowLeft, ArrowRight,
   FileText, CheckCircle, Loader2, Building2, ShieldCheck,
@@ -14,7 +14,6 @@ import { SubmitEvidenceModal } from '../components/SubmitEvidenceModal';
 import { WeeklyPlanner } from '../components/WeeklyPlanner';
 import { CredentialsTrackerModal } from '../components/CredentialsTrackerModal';
 import { getCredentialGuidance, fetchDynamicCredentialGuidance, looksLikeCredential } from '../utils/credentialGuide';
-import { API_URL } from '../apiConfig';
 
 // Official GoML PreQ Logo (NO EMOJIS)
 const GoMLPreQLogo = () => (
@@ -202,6 +201,8 @@ const formatKickoffDate = (dateStr) => {
   }
 };
 
+const NO_ITEMS = [];
+
 export const ClientPortal = ({ projectId }) => {
   // Alchemist shell: id comes from the #client/<id> hash (or prop fallback)
   const id = projectId || (typeof window !== 'undefined' ? (window.location.hash.split('?')[0].split('/')[1] || '') : '');
@@ -211,10 +212,15 @@ export const ClientPortal = ({ projectId }) => {
   const hashQuery = typeof window !== 'undefined' ? window.location.hash.split('?')[1] || '' : '';
   const searchParams = new URLSearchParams(hashQuery);
 
-  const [project, setProject] = useState(null);
-  const [checklist, setChecklist] = useState([]);
+  // Server data: TanStack Query. The page refreshes every 2 s, and the moment the client returns to the tab.
+  const liveOptions = { refetchInterval: 2000, refetchOnWindowFocus: 'always', retry: 1 };
+  const projectQ = useProject(id, liveOptions);
+  const checklistQ = useChecklist(id, liveOptions);
+  const project = projectQ.data ?? null;
+  const checklist = checklistQ.data ?? NO_ITEMS;
+  const loading = projectQ.isPending || checklistQ.isPending;
+  const updateItem = useUpdateItem();
   const [activeItem, setActiveItem] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [submitModalItem, setSubmitModalItem] = useState(null);
   const [credsOpen, setCredsOpen] = useState(false);
   const deepLinkDone = useRef(false);
@@ -270,8 +276,7 @@ export const ClientPortal = ({ projectId }) => {
     // Client transitions between Pending and Submitted (In Review for goML)
     const nextStatus = item.status === 'Submitted' ? 'Pending' : 'Submitted';
     try {
-      await axios.put(`${API_URL}/items/${item.id}`, { status: nextStatus });
-      fetchProjectData();
+      await updateItem.mutateAsync({ id: item.id, patch: { status: nextStatus } });
       if (nextStatus === 'Submitted') {
         triggerToast(`Submitted "${item.name}" for goML Engineering review!`);
       } else {
@@ -279,52 +284,26 @@ export const ClientPortal = ({ projectId }) => {
       }
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.detail || "Could not update status.");
+      alert(apiError(err, "Could not update status."));
     }
   };
 
-  const fetchProjectData = async () => {
-    try {
-      const [projRes, checkRes] = await Promise.all([
-        axios.get(`${API_URL}/projects/${id}`),
-        axios.get(`${API_URL}/projects/${id}/checklist`)
-      ]);
-      setProject(projRes.data);
-      const items = checkRes.data || [];
-      setChecklist(items);
-      setActiveItem(prev => {
-        if (!prev && items.length > 0) return items[0];
-        if (prev) {
-          const matched = items.find(i => i.id === prev.id);
-          return matched || items[0] || null;
-        }
-        return null;
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  /** Refresh now (used by the modals and the "Refresh Portal" button). */
+  const fetchProjectData = () => Promise.all([projectQ.refetch(), checklistQ.refetch()]);
 
+  // keep the open request in step with the latest checklist: the first one by default, the same one when it still exists
   useEffect(() => {
-    let isMounted = true;
-    fetchProjectData();
-    const interval = setInterval(() => {
-      if (isMounted) fetchProjectData();
-    }, 2000);
-
-    const onFocus = () => {
-      if (isMounted) fetchProjectData();
-    };
-    window.addEventListener('focus', onFocus);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [id]);
+    if (!checklistQ.data) return;
+    const items = checklistQ.data;
+    setActiveItem(prev => {
+      if (!prev && items.length > 0) return items[0];
+      if (prev) {
+        const matched = items.find(i => i.id === prev.id);
+        return matched || items[0] || null;
+      }
+      return null;
+    });
+  }, [checklistQ.dataUpdatedAt]);
 
   // Direct link to a single request: #client/<id>?item=<itemId> opens it; ?tab=credentials opens the tracker
   useEffect(() => {

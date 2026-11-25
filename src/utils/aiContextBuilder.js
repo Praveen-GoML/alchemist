@@ -5,21 +5,23 @@
 //   AI coding agent (Aimatic, Cursor, Claude Code, Copilot Workspace…).
 // ══════════════════════════════════════════════════════════════════════
 
-import { API_URL } from '../apiConfig';
+import { queryClient } from '../lib/queryClient';
+import { projectQuery, checklistQuery, brdQuery, statsQuery } from '../api/preq';
 
 const DIVIDER = '════════════════════════════════════════════════════════════════';
 const THIN = '────────────────────────────────────────────────────────────────';
 
 // ── Data fetching ────────────────────────────────────────────────────
 export async function fetchBundleData(projectId) {
-  const safeGet = (url) =>
-    fetch(url).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  // each piece comes through the query cache, so anything the page already loaded is reused
+  // and one that fails simply comes back empty instead of stopping the whole bundle
+  const safe = (options) => queryClient.fetchQuery(options).catch(() => null);
 
   const [project, checklist, brd, stats] = await Promise.all([
-    safeGet(`${API_URL}/projects/${projectId}`),
-    safeGet(`${API_URL}/projects/${projectId}/checklist`),
-    safeGet(`${API_URL}/projects/${projectId}/brd`),
-    safeGet(`${API_URL}/projects/dashboard-stats`)
+    safe(projectQuery(projectId)),
+    safe(checklistQuery(projectId)),
+    safe(brdQuery(projectId)),
+    safe(statsQuery()),
   ]);
 
   const items = Array.isArray(checklist) ? checklist : checklist?.items || checklist?.checklist || [];

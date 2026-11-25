@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Package, Copy, Check, Download, X, Loader2, FileText, Layers, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { buildAIContextBundle } from '../utils/aiContextBuilder';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -9,23 +10,20 @@ import { buildAIContextBundle } from '../utils/aiContextBuilder';
 // ══════════════════════════════════════════════════════════════════════
 
 export const AIBundleModal = ({ projectId, projectName, onClose }) => {
-  const [context, setContext] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // The bundle is built once on open (a query that stitches several cached reads together)
+  const bundleQ = useQuery({
+    queryKey: ['preq', 'project', String(projectId), 'ai-bundle'],
+    queryFn: () => buildAIContextBundle(projectId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const context = bundleQ.data ?? '';
+  const loading = bundleQ.isPending;
+  const error = bundleQ.isError ? (bundleQ.error?.message || 'Failed to generate the bundle.') : '';
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
-
-  // Build the context once on open
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError('');
-    buildAIContextBundle(projectId)
-      .then(text => { if (active) setContext(text); })
-      .catch(err => { if (active) setError(err?.message || 'Failed to generate the bundle.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [projectId]);
 
   // Auto-download the bundle as soon as it is ready
   useEffect(() => {

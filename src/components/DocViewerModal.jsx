@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { keys } from '../api/keys';
 import { X, ExternalLink, Download, Copy, Check, FileText, Loader2 } from 'lucide-react';
 import { safeUrl } from '../utils/safeUrl';
-import { fetchPrivateFile, canPreviewPrivate } from '../services/documentStorage';
+import { fetchPrivateFile } from '../services/documentStorage';
 import { fileType } from './DocCard';
 import DocRenderer from './DocRenderer';
 
@@ -50,15 +52,25 @@ export default function DocViewerModal({ doc, categoryLabel, canDownload = true,
   const onClose = () => { if (closing) return; setClosing(true); setTimeout(onDone, 200); };
   const isPrivate = !!doc.isPrivate;
   const [blobUrl, setBlobUrl] = useState('');
-  const [privErr, setPrivErr] = useState('');
   const fileName = doc.fileName || doc.title || '';
   const previewable = !isPrivate || !!doc.path;
   const ext = ((doc.path || fileName).split('.').pop() || '').toLowerCase();
-  const [blob, setBlob] = useState(null);
+  // the private file is a query: fetched once, shared, and dropped from memory shortly after the reader closes
+  const fileQuery = useQuery({
+    queryKey: keys.privateFile(doc.path),
+    queryFn: () => fetchPrivateFile(doc.path),
+    enabled: isPrivate && previewable && !!doc.path,
+    staleTime: Infinity,
+    gcTime: 30_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const blob = fileQuery.data ?? null;
+  const privErr = fileQuery.error?.message || '';
   const view = useMemo(() => {
     if (!isPrivate) return previewFor(doc.url, doc.fileName);
     if (!previewable) return { kind: 'none', src: '', raw: '' };
-    if (!blob) return { kind: 'wait', src: '', raw: '' };
+    if (!blob || !blobUrl) return { kind: 'wait', src: '', raw: '' };
     // PDFs and pictures use the browser's own viewer; everything else is drawn by DocRenderer
     // (toolbar=0 hides the PDF viewer's own download and print buttons)
     if (ext === 'pdf') return { kind: 'frame', src: `${blobUrl}#toolbar=0&navpanes=0&view=FitH`, raw: blobUrl, file: true };
@@ -68,12 +80,13 @@ export default function DocViewerModal({ doc, categoryLabel, canDownload = true,
   const [loaded, setLoaded] = useState(false);
   const { label: tlabel } = fileType(doc);
 
+  // an address the iframe / image can open, released when the file goes away
   useEffect(() => {
-    if (!isPrivate || !previewable || !doc.path) return undefined;
-    let url = '', alive = true;
-    fetchPrivateFile(doc.path).then(b => { if (alive) { url = URL.createObjectURL(b); setBlobUrl(url); setBlob(b); } }).catch(e => alive && setPrivErr(e.message));
-    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [isPrivate, previewable, doc.path]);
+    if (!blob) { setBlobUrl(''); return undefined; }
+    const url = URL.createObjectURL(blob);
+    setBlobUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

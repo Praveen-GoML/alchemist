@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from '../api/client';
+import { apiError, useAddItem } from '../api/preq';
 import { X, Search, KeyRound, Check, Clock, ExternalLink, ShieldCheck, Link2, ArrowRight, Plus, Copy, Mail, Send, Loader2 } from 'lucide-react';
-import { API_URL } from '../apiConfig';
 import { looksLikeCredential } from '../utils/credentialGuide';
 
 // Credentials tracker: every credential / access / link the project needs, grouped by
@@ -103,7 +102,8 @@ export const CredentialsTrackerModal = ({ checklist, projectName, projectId, cli
   const [toast, setToast] = useState('');
   const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 2400); };
   const [formOpen, setFormOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const addRequest = useAddItem(projectId);
+  const saving = addRequest.isPending;
   const [formErr, setFormErr] = useState('');
   const [created, setCreated] = useState(null);
   const [form, setForm] = useState({ service: 'aws', what: '', description: '', owner: 'Client', due: '', critical: true });
@@ -112,10 +112,10 @@ export const CredentialsTrackerModal = ({ checklist, projectName, projectId, cli
   const createRequest = async () => {
     const svc = SERVICES.find((s) => s.key === form.service) || OTHER;
     if (!form.what.trim()) { setFormErr('Say what you need, for example "Production read-only access".'); return; }
-    setSaving(true); setFormErr('');
+    setFormErr('');
     try {
       const name = `${svc.key === 'other' ? '' : svc.label + ' '}${form.what.trim()}`.trim();
-      const res = await axios.post(`${API_URL}/projects/${projectId}/items`, {
+      const res = await addRequest.mutateAsync({
         name,
         category: 'Security',
         description: form.description.trim() || `${name}: credentials or access required from the client.`,
@@ -126,11 +126,11 @@ export const CredentialsTrackerModal = ({ checklist, projectName, projectId, cli
         depends_on: [],
       });
       onItemAdded && onItemAdded();
-      setCreated(res.data && res.data.id ? res.data : { id: null, name, due_date: form.due });
+      setCreated(res && res.id ? res : { id: null, name, due_date: form.due });
       setForm({ service: form.service, what: '', description: '', owner: 'Client', due: '', critical: true });
     } catch (e) {
-      setFormErr(e.response?.data?.detail || 'Could not create the request.');
-    } finally { setSaving(false); }
+      setFormErr(apiError(e, 'Could not create the request.'));
+    }
   };
 
   useEffect(() => {

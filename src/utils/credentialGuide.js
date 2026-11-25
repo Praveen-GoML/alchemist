@@ -1,6 +1,6 @@
-import axios from '../api/client';
-import { API_URL } from '../apiConfig';
-const DYNAMIC_CACHE = {};
+import { queryClient } from '../lib/queryClient';
+import { keys } from '../api/keys';
+import { requestCredentialGuide } from '../api/preq';
 
 /**
  * Non-Technical Credential Retrieval & Delegation Guide
@@ -32,31 +32,23 @@ export const looksLikeCredential = (item) => {
 export const fetchDynamicCredentialGuidance = async (item, forceRefresh = false) => {
   if (!item) return null;
   if (!looksLikeCredential(item)) return getCredentialGuidance(item);
-  const key = `${item.name}:${item.category || ''}`;
-  if (!forceRefresh && DYNAMIC_CACHE[key]) {
-    return DYNAMIC_CACHE[key];
-  }
 
-  try {
-    const res = await axios.post(`${API_URL}/copilot/dynamic-credential-guide`, {
-      name: item.name,
-      category: item.category,
-      description: item.description,
-      expected_evidence: item.expected_evidence,
-      client_name: 'Client Sponsor'
-    });
-    if (res.data && res.data.isCredential) {
-      DYNAMIC_CACHE[key] = res.data;
-      return res.data;
-    }
-  } catch (err) {
-    console.warn("Dynamic scraper fallback to local rules:", err);
-  }
-
-  // Fallback to local synchronous rules
-  const localGuide = getCredentialGuidance(item);
-  DYNAMIC_CACHE[key] = localGuide;
-  return localGuide;
+  // One answer per credential, kept in the query cache (so asking again is free unless a refresh is forced).
+  // If the AI is unavailable the local rules are cached instead, so a broken endpoint is not asked again and again.
+  return queryClient.fetchQuery({
+    queryKey: keys.credentialGuide(item),
+    staleTime: forceRefresh ? 0 : Infinity,
+    gcTime: Infinity,
+    queryFn: async () => {
+      try {
+        const guide = await requestCredentialGuide(item);
+        if (guide && guide.isCredential) return guide;
+      } catch (err) {
+        console.warn("Dynamic scraper fallback to local rules:", err);
+      }
+      return getCredentialGuidance(item);
+    },
+  });
 };
 
 export const getCredentialGuidance = (item) => {

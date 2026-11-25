@@ -1,10 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
-import axios from '../api/client';
+﻿import React, { useState } from 'react';
+import { useCertificate } from '../api/preq';
 import { 
   Award, Printer, Share2, Check, ArrowLeft, Loader2 
 } from 'lucide-react';
-
-import { API_URL } from '../apiConfig';
 
 export const CertificateView = ({ projectId }) => {
   // Alchemist shell: id comes from the #certificate/<id> hash (or prop fallback)
@@ -16,25 +14,14 @@ export const CertificateView = ({ projectId }) => {
       window.location.hash = '#prereq';
     }
   };
-  const [cert, setCert] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // The certificate is a query: loaded once, and a "not cleared yet" answer is shown as a message, not retried.
+  const certQ = useCertificate(id);
+  const cert = certQ.data ?? null;
+  const loading = certQ.isPending;
+  const error = certQ.isError
+    ? (certQ.error?.response?.data?.detail || 'Project has not yet achieved kick-off clearance for certification.')
+    : '';
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const fetchCertificate = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/projects/${id}/certificate`);
-        setCert(res.data);
-      } catch (err) {
-        console.error(err);
-        setError(err.response?.data?.detail || 'Project has not yet achieved kick-off clearance for certification.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCertificate();
-  }, [id]);
 
   const handlePrint = () => {
     window.print();

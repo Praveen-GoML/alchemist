@@ -1,11 +1,11 @@
 ﻿import React, { useState } from 'react';
-import axios from '../api/client';
+import { apiError, useRejectItem } from '../api/preq';
 import { X, Loader2 } from 'lucide-react';
-import { API_URL } from '../apiConfig';
 
 export const RejectModal = ({ isOpen, onClose, item, onRejected }) => {
   const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
+  const rejectItem = useRejectItem();
+  const loading = rejectItem.isPending;
   const [error, setError] = useState('');
 
   if (!isOpen || !item) return null;
@@ -17,21 +17,16 @@ export const RejectModal = ({ isOpen, onClose, item, onRejected }) => {
       return;
     }
 
-    setLoading(true);
     setError('');
 
     try {
-      await axios.post(`${API_URL}/items/${item.id}/reject`, {
-        reason: reason.trim()
-      });
+      await rejectItem.mutateAsync({ id: item.id, reason: reason.trim() });
 
       onRejected();
       onClose();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || 'Failed to reject evidence.');
-    } finally {
-      setLoading(false);
+      setError(apiError(err, 'Failed to reject evidence.'));
     }
   };
 

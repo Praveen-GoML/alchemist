@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import axios from '../api/client';
+import { useTemplates, useCreateProject, useAnalyzeSow, isCancelled } from '../api/preq';
 import lottie from 'lottie-web';
 import scanningAnimation from '../assets/scanning-animation.json';
 import {
@@ -20,7 +20,6 @@ import {
   Box
 } from '@mui/material';
 
-import { API_URL } from '../apiConfig';
 import { GoMLDatePicker } from '../components/GoMLDatePicker';
 import { MaterialSelect } from '../components/MaterialSelect';
 
@@ -184,13 +183,15 @@ export const CreateProject = () => {
   const [isCustomDeployment, setIsCustomDeployment] = useState(false);
 
   const [kickoffDate, setKickoffDate] = useState('');
-  const [wizardLoading, setWizardLoading] = useState(false);
+  const createProject = useCreateProject();
+  const wizardLoading = createProject.isPending;
   const [wizardError, setWizardError] = useState('');
 
   // SOW state
   const [file, setFile] = useState(null);
   const [sowText, setSowText] = useState('');
-  const [sowLoading, setSowLoading] = useState(false);
+  const analyzeSow = useAnalyzeSow();
+  const sowLoading = analyzeSow.isPending;
   const [sowStatus, setSowStatus] = useState('');
   // Live countdown while the proposal is being analysed
   const [sowElapsed, setSowElapsed] = useState(0);
@@ -210,37 +211,32 @@ export const CreateProject = () => {
   const abortControllerRef = useRef(null);
 
 
-  // Fetch dynamic template options from API
+  // Template options come from the server (a query, fetched once). They set the starting choices the first time they arrive.
+  const templatesQ = useTemplates({ staleTime: Infinity, refetchOnWindowFocus: false });
+  const templatesApplied = useRef(false);
   useEffect(() => {
-    const fetchTemplates = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/templates`);
-        if (res.data) {
-          if (Array.isArray(res.data.project_types) && res.data.project_types.length > 0) {
-            const formatted = res.data.project_types.map(t => {
-              if (typeof t === 'string') {
-                return { id: t, label: t, desc: 'Enterprise architecture delivery blueprint' };
-              }
-              return t;
-            });
-            setProjectTypes(formatted);
-            setProjectType(formatted[0].id);
-          }
-          if (Array.isArray(res.data.industries) && res.data.industries.length > 0) {
-            setIndustries(res.data.industries);
-            setIndustry(res.data.industries[0]);
-          }
-          if (Array.isArray(res.data.deployment_targets) && res.data.deployment_targets.length > 0) {
-            setDeployments(res.data.deployment_targets);
-            setDeployment(res.data.deployment_targets[0]);
-          }
+    const data = templatesQ.data;
+    if (!data || templatesApplied.current) return;
+    templatesApplied.current = true;
+    if (Array.isArray(data.project_types) && data.project_types.length > 0) {
+      const formatted = data.project_types.map(t => {
+        if (typeof t === 'string') {
+          return { id: t, label: t, desc: 'Enterprise architecture delivery blueprint' };
         }
-      } catch (err) {
-        console.warn('Using fallback templates config:', err);
-      }
-    };
-    fetchTemplates();
-  }, []);
+        return t;
+      });
+      setProjectTypes(formatted);
+      setProjectType(formatted[0].id);
+    }
+    if (Array.isArray(data.industries) && data.industries.length > 0) {
+      setIndustries(data.industries);
+      setIndustry(data.industries[0]);
+    }
+    if (Array.isArray(data.deployment_targets) && data.deployment_targets.length > 0) {
+      setDeployments(data.deployment_targets);
+      setDeployment(data.deployment_targets[0]);
+    }
+  }, [templatesQ.data]);
 
   const handleCreateWizard = async (e) => {
     e.preventDefault();
@@ -248,7 +244,6 @@ export const CreateProject = () => {
       setWizardError('Initiative name is required.');
       return;
     }
-    setWizardLoading(true);
     setWizardError('');
 
     const finalType = isCustomType ? (customProjectType.trim() || 'Custom Archetype') : projectType;
@@ -256,7 +251,7 @@ export const CreateProject = () => {
     const finalDeployment = isCustomDeployment ? (customDeployment.trim() || 'Multi-Cloud') : deployment;
 
     try {
-      const res = await axios.post(`${API_URL}/projects`, {
+      const created = await createProject.mutateAsync({
         name: name.trim(),
         description: description.trim(),
         client_name: clientName.trim() || 'Enterprise Client',
@@ -267,12 +262,10 @@ export const CreateProject = () => {
         target_kickoff_date: kickoffDate || ''
       });
 
-      navigate(`/dashboard/${res.data.id}`);
+      navigate(`/dashboard/${created.id}`);
     } catch (err) {
       console.error(err);
       setWizardError(err.response?.data?.detail || 'Failed to initialize project.');
-    } finally {
-      setWizardLoading(false);
     }
   };
 
@@ -281,7 +274,6 @@ export const CreateProject = () => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    setSowLoading(false);
     setSowStatus('');
   };
 
@@ -318,7 +310,6 @@ export const CreateProject = () => {
     // Estimate total time from document size (chunks are analysed in parallel)
     const approxChars = file ? Math.round((file.size || 0) * 0.5) : (sowText || '').length;
     sowEstimateRef.current = Math.min(120, 18 + 8 * Math.max(1, Math.ceil(approxChars / 7600)));
-    setSowLoading(true);
     setSowError('');
     setSowErrorDetail('');
     setShowErrorDetail(false);
@@ -332,24 +323,11 @@ export const CreateProject = () => {
         if (!controller.signal.aborted) setSowStatus('Generating tailored prerequisites across Data, Env, Compliance & People...');
       }, 2400);
 
-      let res;
-      if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        res = await axios.post(`${API_URL}/analyze-sow-file`, formData, {
-          signal: controller.signal
-        });
-      } else {
-        res = await axios.post(`${API_URL}/analyze-sow`, {
-          content: sowText,
-        }, {
-          signal: controller.signal
-        });
-      }
+      const analysed = await analyzeSow.mutateAsync({ file, text: sowText, signal: controller.signal });
 
-      navigate(`/dashboard/${res.data.id}`);
+      navigate(`/dashboard/${analysed.id}`);
     } catch (err) {
-      if (axios.isCancel(err) || err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+      if (isCancelled(err)) {
         console.log('SOW analysis cancelled by user.');
         setSowStatus('');
         return;
@@ -385,7 +363,6 @@ export const CreateProject = () => {
       setSowError(friendlyMsg);
       setSowErrorDetail(isTechnicalDump ? rawDetail : '');
     } finally {
-      setSowLoading(false);
       abortControllerRef.current = null;
     }
   };

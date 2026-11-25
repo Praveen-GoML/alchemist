@@ -107,7 +107,8 @@ export default function Sidebar({ view, data = {}, onToggleCollapse, onNavigate 
           const visible = items.filter(([href]) => isManagementUser || !MEMBER_HIDDEN_HREFS.has(href));
           if (!visible.length) return null;
           const hasActive = visible.some(([href]) => href === view);
-          const isOpen = hasActive || !closed[key];
+          // sections start open, but never override a collapse the user asked for
+          const isOpen = !closed[key];
           const total = visible.reduce((n, [href]) => n + (badges[href]?.n || 0), 0);
           return (
             <div className={`ssec${isOpen ? ' open' : ''}${hasActive ? ' has-active' : ''}`} key={key}>

@@ -1,12 +1,12 @@
 ﻿import React, { useState } from 'react';
-import axios from '../api/client';
+import { apiError, useVerifyItem, useAiVerifyItem } from '../api/preq';
 import {
   X, Check, Sparkles, ShieldCheck, FileText, Download,
   ExternalLink, Eye, Key, AlertTriangle, ArrowRight,
   Clock, CheckCircle, CheckCircle2, XCircle, Copy, Send,
   User, Calendar, Layers, Lock, Image as ImageIcon, ZoomIn, RefreshCw, Loader2
 } from 'lucide-react';
-import { API_URL, BASE_URL } from '../apiConfig';
+import { BASE_URL } from '../apiConfig';
 import { openSafe, safeUrl } from '../utils/safeUrl';
 
 export const ViewProofModal = ({
@@ -17,7 +17,9 @@ export const ViewProofModal = ({
   onUpdated,
   onOpenRejectModal
 }) => {
-  const [isVerifying, setIsVerifying] = useState(false);
+  const verifyItem = useVerifyItem();
+  const aiVerifyItem = useAiVerifyItem();
+  const isVerifying = aiVerifyItem.isPending;
   const [copiedKey, setCopiedKey] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
@@ -79,28 +81,25 @@ export const ViewProofModal = ({
   // Instant Manual Approval
   const handleApprove = async () => {
     try {
-      await axios.post(`${API_URL}/items/${item.id}/verify`);
+      await verifyItem.mutateAsync(item.id);
       triggerToast(`Milestone "${item.name}" marked Verified!`);
       if (onUpdated) onUpdated();
       onClose();
     } catch (err) {
       console.error(err);
-      triggerToast(err.response?.data?.detail || 'Error approving milestone');
+      triggerToast(apiError(err, 'Error approving milestone'));
     }
   };
 
   // AI Proof Verification
   const handleAiVerify = async () => {
-    setIsVerifying(true);
     try {
-      await axios.post(`${API_URL}/items/${item.id}/ai-verify`);
+      await aiVerifyItem.mutateAsync(item.id);
       triggerToast('AI verification analysis complete!');
       if (onUpdated) onUpdated();
     } catch (err) {
       console.error(err);
-      triggerToast(err.response?.data?.detail || 'AI Verification failed');
-    } finally {
-      setIsVerifying(false);
+      triggerToast(apiError(err, 'AI Verification failed'));
     }
   };
 

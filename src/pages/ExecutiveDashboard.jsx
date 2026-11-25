@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
-import axios from '../api/client';
+﻿import React, { useState, useMemo } from 'react';
+import { useProjects, useDashboardStats, useUpdateProject, useDeleteProject, useClearAllProjects, useSeedDemo } from '../api/preq';
 import { 
   CheckCircle, Clock, AlertTriangle, Plus, Upload, 
   ExternalLink, ArrowRight, Sparkles, Building2, Server, 
@@ -8,7 +8,6 @@ import {
   Trash2, RefreshCw, FileText, Check, Pencil, Copy, MoreHorizontal
 } from 'lucide-react';
 
-import { API_URL } from '../apiConfig';
 import { useAuth } from '../context/AuthContext';
 import { useProjectScope } from '../hooks/useProjectScope';
 import { SkeletonPrereqRows } from '../components/common/Skeleton';
@@ -21,18 +20,25 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
   const canAdmin = isAdmin();
   const canManage = !!isManagementUser;
   const canSeed = canAdmin && import.meta.env.DEV; // demo seeding is dev-only
-  const [allProjects, setProjects] = useState([]);
+  // Server data: TanStack Query. Refreshed every 8 s, and the moment you come back to the tab.
+  const projectsQ = useProjects({ refetchInterval: 8000 });
+  const statsQ = useDashboardStats({ refetchInterval: 8000 });
+  const allProjects = useMemo(() => projectsQ.data || [], [projectsQ.data]);
+  const stats = statsQ.data ?? null;
+  const loading = projectsQ.isPending || statsQ.isPending;
+  const updateProject = useUpdateProject();
+  const deleteProject = useDeleteProject();
+  const clearAll = useClearAllProjects();
+  const seedDemo = useSeedDemo();
+  const isClearing = clearAll.isPending;
+  const isSeedingDemo = seedDemo.isPending;
   const { canSeeAny } = useProjectScope(appData?.members || []);
   // Members only see pre-req trackers for their own projects
   const projects = useMemo(() => allProjects.filter(p => canSeeAny(p.client_name, p.name)), [allProjects, canSeeAny]);
-  const [stats, setStats] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [loading, setLoading] = useState(true);
   const [ctx, setCtx] = useState(null);       // { x, y, proj } for the right-click menu
   const [editProj, setEditProj] = useState(null);
-  const [isClearing, setIsClearing] = useState(false);
-  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   // Hash-based navigation (Alchemist shell): map preq routes onto #prereq, #client, #certificate views
@@ -56,48 +62,15 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const fetchData = async () => {
-    try {
-      const [projRes, statsRes] = await Promise.all([
-        axios.get(`${API_URL}/projects`),
-        axios.get(`${API_URL}/projects/dashboard-stats`),
-      ]);
-      setProjects(projRes.data || []);
-      setStats(statsRes.data);
-    } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 8000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handleClearAll = async () => {
     if (!canAdmin) return;
-    setIsClearing(true);
     try {
-      await axios.post(`${API_URL}/projects/clear-all`);
-      setProjects([]);
-      setStats({
-        total_projects: 0,
-        cleared_projects: 0,
-        at_risk_projects: 0,
-        average_score: 0,
-        total_critical_blockers: 0,
-        recent_escalations: []
-      });
+      await clearAll.mutateAsync();
       setShowClearConfirm(false);
       triggerToast('All initiatives and prerequisite data cleared successfully.');
     } catch (err) {
       console.error('Failed to clear database:', err);
       triggerToast('Error clearing database. Please try again.');
-    } finally {
-      setIsClearing(false);
     }
   };
 
@@ -108,11 +81,9 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
 
   const saveInitiative = async (payload) => {
     const id = editProj.id;
-    const res = await axios.put(`${API_URL}/projects/${id}`, payload);
-    setProjects(prev => prev.map(p => (p.id === id ? { ...p, ...payload, ...(res.data || {}) } : p)));
+    await updateProject.mutateAsync({ id, payload });
     setEditProj(null);
     triggerToast('Initiative updated.');
-    fetchData();
   };
 
   const openMenu = (e, proj) => {
@@ -142,10 +113,8 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
     e?.stopPropagation?.();
     if (!(await dialog.confirm(`"${name}" and its prerequisite tracker will be permanently deleted.`, { title: 'Delete initiative?', variant: 'danger', confirmLabel: 'Delete' }))) return;
     try {
-      await axios.delete(`${API_URL}/projects/${id}`);
-      setProjects(prev => prev.filter(p => p.id !== id));
+      await deleteProject.mutateAsync(id);
       triggerToast(`Initiative "${name}" deleted.`);
-      fetchData();
     } catch (err) {
       console.error('Failed to delete project:', err);
       triggerToast('Error deleting initiative.');
@@ -154,16 +123,12 @@ export const ExecutiveDashboard = ({ onOpenCopilot, appData }) => {
 
   const handleSeedDemo = async () => {
     if (!canSeed) return;
-    setIsSeedingDemo(true);
     try {
-      await axios.post(`${API_URL}/projects/seed-demo`);
+      await seedDemo.mutateAsync();
       triggerToast('Benchmark MovilVentas demo initiative loaded.');
-      fetchData();
     } catch (err) {
       console.error('Failed to seed demo:', err);
       triggerToast('Error seeding demo initiative.');
-    } finally {
-      setIsSeedingDemo(false);
     }
   };
 

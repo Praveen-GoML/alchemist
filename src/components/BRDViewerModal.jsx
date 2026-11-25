@@ -1,17 +1,24 @@
 ﻿import React, { useState, useEffect, useMemo, Fragment } from 'react';
-import axios from '../api/client';
+import { useBrd, useChecklist, useGenerateBrd, useExportFile } from '../api/preq';
 import {
   FileText, Download, X, Layers, RefreshCw, AlertTriangle,
   FileSpreadsheet, ChevronDown, Sparkles
 } from 'lucide-react';
 import { API_URL } from '../apiConfig';
 
+const NO_ITEMS = [];
+
 export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
-  const [brd, setBrd] = useState(null);
-  const [checklistItems, setChecklistItems] = useState([]);
+  // Server data via TanStack Query: the BRD, and the checklist (shared with the project page, so it is usually already cached)
+  const brdQ = useBrd(projectId, { refetchOnWindowFocus: false });
+  const checklistQ = useChecklist(projectId, { refetchOnWindowFocus: false });
+  const brd = brdQ.data ?? null;
+  const checklistItems = checklistQ.data ?? NO_ITEMS;
+  const loading = brdQ.isPending || checklistQ.isPending;
+  const generateBrd = useGenerateBrd(projectId);
+  const regenerating = generateBrd.isPending;
+  const exportFile = useExportFile(projectId);
   const [viewMode, setViewMode] = useState('docx'); // 'docx' | 'xlsx'
-  const [loading, setLoading] = useState(true);
-  const [regenerating, setRegenerating] = useState(false);
   const [revision, setRevision] = useState(0);
 
   // Real Excel Spreadsheet state
@@ -27,39 +34,15 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
     return `${API_URL}/projects/${projectId}/preview-brd-html?rev=${revision}`;
   }, [projectId, revision]);
 
-  const fetchBRD = async () => {
-    setLoading(true);
-    try {
-      const [brdRes, itemsRes] = await Promise.all([
-        axios.get(`${API_URL}/projects/${projectId}/brd`),
-        axios.get(`${API_URL}/projects/${projectId}/checklist`).catch(() => ({ data: [] }))
-      ]);
-      setBrd(brdRes.data);
-      setChecklistItems(itemsRes.data || []);
-    } catch (err) {
-      console.error('Error loading BRD:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBRD();
-  }, [projectId]);
-
   const handleRegenerate = async () => {
     if (regenerating) return;
-    setRegenerating(true);
     try {
-      const res = await axios.post(`${API_URL}/projects/${projectId}/generate-brd`, {});
-      setBrd(res.data);
+      await generateBrd.mutateAsync();
       // Increment revision so iframe reloads ONLY upon explicit regenerate
       setRevision(prev => prev + 1);
     } catch (err) {
       console.error('Error regenerating BRD:', err);
       alert('Failed to regenerate BRD.');
-    } finally {
-      setRegenerating(false);
     }
   };
 
@@ -138,17 +121,14 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
     }
   }, [checklistItems]);
 
-  const [downloadingDocx, setDownloadingDocx] = useState(false);
-  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const downloadingDocx = exportFile.isPending && exportFile.variables === 'docx';
+  const downloadingExcel = exportFile.isPending && exportFile.variables === 'xlsx';
 
   const handleDownloadDocx = async () => {
     if (downloadingDocx) return;
-    setDownloadingDocx(true);
     try {
-      const response = await axios.get(`${API_URL}/projects/${projectId}/export-brd-docx`, {
-        responseType: 'blob'
-      });
-      const blob = new Blob([response.data], {
+      const data = await exportFile.mutateAsync('docx');
+      const blob = new Blob([data], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       });
       const url = window.URL.createObjectURL(blob);
@@ -163,19 +143,14 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
     } catch (err) {
       console.error('Download error:', err);
       window.location.href = `${API_URL}/projects/${projectId}/export-brd-docx`;
-    } finally {
-      setDownloadingDocx(false);
     }
   };
 
   const handleDownloadExcel = async () => {
     if (downloadingExcel) return;
-    setDownloadingExcel(true);
     try {
-      const response = await axios.get(`${API_URL}/projects/${projectId}/export-excel-tracker`, {
-        responseType: 'blob'
-      });
-      const blob = new Blob([response.data], {
+      const data = await exportFile.mutateAsync('xlsx');
+      const blob = new Blob([data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
       const url = window.URL.createObjectURL(blob);
@@ -190,8 +165,6 @@ export const BRDViewerModal = ({ projectId, projectName, onClose }) => {
     } catch (err) {
       console.error('Download error:', err);
       window.location.href = `${API_URL}/projects/${projectId}/export-excel-tracker`;
-    } finally {
-      setDownloadingExcel(false);
     }
   };
 

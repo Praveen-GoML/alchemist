@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from '../api/client';
+import { apiError, useSubmitEvidence } from '../api/preq';
 import {
   X, Upload, Link2, KeyRound, Eye, EyeOff, ShieldCheck, FileText, Trash2, Send, Check, Plus,
   ExternalLink, ChevronDown, ChevronUp, Copy, Loader2, AlertTriangle, CheckCircle2, ClipboardPaste, Lock,
 } from 'lucide-react';
-import { API_URL } from '../apiConfig';
 import { fetchDynamicCredentialGuidance, looksLikeCredential } from '../utils/credentialGuide';
 
 import { dialog } from '../utils/dialog';
@@ -46,7 +45,8 @@ export const SubmitEvidenceModal = ({ isOpen = true, item, onClose, onUpdated, o
   const [creds, setCreds] = useState([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
-  const [saving, setSaving] = useState(false);
+  const submitEvidence = useSubmitEvidence();
+  const saving = submitEvidence.isPending;
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [guide, setGuide] = useState(null);
@@ -121,7 +121,6 @@ export const SubmitEvidenceModal = ({ isOpen = true, item, onClose, onUpdated, o
   const submit = async (status) => {
     const unnamed = filledCreds.find((c) => !c.name.trim());
     if (unnamed) { setError('Give each credential a name so the goML team knows what it is.'); return; }
-    setSaving(true);
     setError('');
     try {
       const form = new FormData();
@@ -132,16 +131,13 @@ export const SubmitEvidenceModal = ({ isOpen = true, item, onClose, onUpdated, o
         form.append('credentials', JSON.stringify(filledCreds.map((c) => ({ name: c.name.trim(), value: c.value.trim() }))));
       }
       form.append('status', status);
-      await axios.post(`${API_URL}/items/${item.id}/submit-evidence`, form);
-      if (status === 'Verified') await axios.post(`${API_URL}/items/${item.id}/verify`);
+      await submitEvidence.mutateAsync({ id: item.id, form, verify: status === 'Verified' });
       setCreds([]);               // never keep secrets in memory longer than needed
       onUpdated && onUpdated();
       onSubmitted && onSubmitted();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Could not submit. Please try again.');
-    } finally {
-      setSaving(false);
+      setError(apiError(err, 'Could not submit. Please try again.'));
     }
   };
 

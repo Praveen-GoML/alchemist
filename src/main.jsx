@@ -5,6 +5,8 @@ import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import DialogHost from './components/common/DialogHost.jsx'
 import TooltipHost from './components/common/TooltipHost.jsx'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './lib/queryClient'
 import { registerServiceWorker } from './services/push'
 import { dialog } from './utils/dialog'
 
@@ -17,9 +19,11 @@ registerServiceWorker()
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
-      <DialogHost />
-      <TooltipHost />
+      <QueryClientProvider client={queryClient}>
+        <App />
+        <DialogHost />
+        <TooltipHost />
+      </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

@@ -1,37 +1,82 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
+
+const MENU_MAX = 290;
+const GAP = 8;
 
 export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'Select an option' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
+  const menuRef = useRef(null);
+  // fixed coordinates, so the menu overlays the page instead of growing its scroll height
+  const [place, setPlace] = useState({ top: 0, left: 0, width: 0, maxHeight: MENU_MAX });
+
+  const openMenu = () => {
+    const r = containerRef.current?.getBoundingClientRect();
+    if (r) {
+      setPlace({
+        top: r.bottom + GAP,
+        left: Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8)),
+        width: r.width,
+        maxHeight: MENU_MAX,
+      });
+    }
+    setIsOpen(true);
+  };
+
+  const closeMenu = () => setIsOpen(false);
+
+  // Measure the trigger and flip the menu above it when there is no room below.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const r = containerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = window.innerHeight - r.bottom - GAP - 12;
+    const above = r.top - GAP - 12;
+    const flip = below < 200 && above > below;
+    setPlace({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8)),
+      width: r.width,
+      maxHeight: Math.max(160, Math.min(MENU_MAX, flip ? above : below)),
+      ...(flip ? { bottom: window.innerHeight - r.top + GAP } : { top: r.bottom + GAP }),
+    });
+  }, [isOpen]);
 
   // Close on outside click
   useEffect(() => {
+    if (!isOpen) return undefined;
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      if (!containerRef.current?.contains(e.target) && !menuRef.current?.contains(e.target)) {
         setIsOpen(false);
       }
     };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
   // Close on Escape key
   useEffect(() => {
+    if (!isOpen) return undefined;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false);
-      }
+      if (e.key === 'Escape') setIsOpen(false);
     };
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  // Close when the page scrolls or resizes; scrolling the menu's own list is fine.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onScroll = (e) => {
+      if (!menuRef.current?.contains(e.target)) setIsOpen(false);
+    };
+    const onResize = () => setIsOpen(false);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   }, [isOpen]);
 
@@ -44,7 +89,7 @@ export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'S
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
       {/* Trigger Box */}
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? closeMenu() : openMenu())}
         style={{
           width: '100%',
           height: '58px',
@@ -88,24 +133,24 @@ export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'S
         </div>
       </div>
 
-      {/* Material 3 Dropdown Popover Menu */}
-      {isOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 8px)',
-          left: 0,
-          right: 0,
-          background: 'var(--surface)',
-          borderRadius: '18px',
-          border: '1.5px solid #FDEEE2',
-          boxShadow: '0 20px 40px -10px rgba(31, 27, 23, 0.2), 0 0 0 1px rgba(237, 125, 49, 0.1)',
-          padding: '8px',
-          zIndex: 1000,
-          maxHeight: '290px',
-          overflowY: 'auto',
-          boxSizing: 'border-box',
-          animation: 'gomlFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
-        }}>
+      {/* Material 3 Dropdown Popover Menu — portaled so it never adds page height */}
+      {isOpen && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            ...place,
+            background: 'var(--surface)',
+            borderRadius: '18px',
+            border: '1.5px solid #FDEEE2',
+            boxShadow: '0 20px 40px -10px rgba(31, 27, 23, 0.2), 0 0 0 1px rgba(237, 125, 49, 0.1)',
+            padding: '8px',
+            zIndex: 100002,
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+            animation: 'gomlFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+        >
           {options.map((option) => {
             const isSelected = value === option;
 
@@ -148,7 +193,8 @@ export const MaterialSelect = ({ value, onChange, options = [], placeholder = 'S
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

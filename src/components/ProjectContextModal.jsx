@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useProjectContext } from '../api/preq';
 import { BookOpen, Copy, Check, Download, X, Loader2, FileText, Code2, Eye } from 'lucide-react';
 import {
   CONTEXT_SECTIONS,
-  fetchProjectContext,
   composeProjectContext,
   estimateTokens,
 } from '../utils/projectContext';
@@ -10,9 +10,13 @@ import {
 // Project Context provider: the full project context as one Markdown
 // document, ready to paste into any AI assistant. Centered dialog.
 export const ProjectContextModal = ({ projectId, projectName, onClose }) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // The context document is a query: fetched when the dialog opens, cached for the next time.
+  const contextQ = useProjectContext(projectId, { refetchOnWindowFocus: false });
+  const data = contextQ.data ?? null;
+  const loading = contextQ.isPending;
+  const error = contextQ.isError
+    ? `Could not load project context${contextQ.error?.response?.status ? ` (HTTP ${contextQ.error.response.status})` : ''}.`
+    : '';
   const [copied, setCopied] = useState(false);
   const [include, setInclude] = useState(() =>
     Object.fromEntries(CONTEXT_SECTIONS.map((s) => [s.key, s.on]))
@@ -21,17 +25,6 @@ export const ProjectContextModal = ({ projectId, projectName, onClose }) => {
   const [copyFormat, setCopyFormat] = useState('prompt');
   // 'preview' = rendered HTML view, 'raw' = monospace source
   const [previewMode, setPreviewMode] = useState('preview');
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError('');
-    fetchProjectContext(projectId)
-      .then((d) => active && setData(d))
-      .catch((e) => active && setError(e?.message || 'Failed to load the project context.'))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
-  }, [projectId]);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();

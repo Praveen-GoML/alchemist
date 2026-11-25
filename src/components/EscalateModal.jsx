@@ -1,7 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
-import axios from '../api/client';
+import { apiError, useEscalateItem } from '../api/preq';
 import { X, Loader2 } from 'lucide-react';
-import { API_URL } from '../apiConfig';
 
 export const EscalateModal = ({ isOpen, onClose, item, onEscalated }) => {
   const [level, setLevel] = useState(2);
@@ -12,29 +11,24 @@ export const EscalateModal = ({ isOpen, onClose, item, onEscalated }) => {
     setError('');
     setMessage(`Prerequisite '${item.name}' assigned to ${item.owner} is currently pending or blocked. Target kick-off schedule is at risk unless evidence is submitted immediately.`);
   }, [item?.id]);
-  const [loading, setLoading] = useState(false);
+  const escalate = useEscalateItem();
+  const loading = escalate.isPending;
   const [error, setError] = useState('');
 
   if (!isOpen || !item) return null;
 
   const handleEscalate = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
     try {
-      await axios.post(`${API_URL}/items/${item.id}/escalate`, {
-        level: parseInt(level),
-        message: message.trim()
-      });
+      await escalate.mutateAsync({ id: item.id, level: parseInt(level), message: message.trim() });
 
       onEscalated();
       onClose();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || 'Failed to dispatch escalation.');
-    } finally {
-      setLoading(false);
+      setError(apiError(err, 'Failed to dispatch escalation.'));
     }
   };
 

@@ -1,7 +1,6 @@
 ﻿import React, { useState } from 'react';
-import axios from '../api/client';
+import { apiError, useAddItem } from '../api/preq';
 import { PlusCircle, X, Loader2 } from 'lucide-react';
-import { API_URL } from '../apiConfig';
 
 const CATEGORIES = ["Environment", "Security", "Data", "Compliance", "People", "Integration"];
 const OWNERS = ["Client Sponsor", "DevOps Lead", "Security & Compliance Lead", "Data Steward", "Cloud Architect", "Project Lead"];
@@ -15,7 +14,8 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
   const [dueDate, setDueDate] = useState('');
   const [expectedEvidence, setExpectedEvidence] = useState('');
   const [selectedDeps, setSelectedDeps] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const addItem = useAddItem(projectId);
+  const loading = addItem.isPending;
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
@@ -27,11 +27,10 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
       return;
     }
 
-    setLoading(true);
     setError('');
 
     try {
-      await axios.post(`${API_URL}/projects/${projectId}/items`, {
+      await addItem.mutateAsync({
         name: name.trim(),
         category,
         description: description.trim(),
@@ -46,9 +45,7 @@ export const AddItemModal = ({ isOpen, onClose, projectId, existingItems = [], o
       onClose();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || 'Failed to add prerequisite.');
-    } finally {
-      setLoading(false);
+      setError(apiError(err, 'Failed to add prerequisite.'));
     }
   };
 

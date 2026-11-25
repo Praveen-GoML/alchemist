@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import axios from '../api/client';
+import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { keys } from '../api/keys';
+import { apiError, useProject, useChecklist, useUpdateItem, useVerifyItem, useAiVerifyItem, useRetryAnalysis, useInternalSignoff } from '../api/preq';
 import { 
   CheckCircle, Clock, AlertTriangle, Upload, Plus, 
   ExternalLink, Lock, Sparkles, Award, Search, 
@@ -60,6 +62,8 @@ function stableOrder(projectId, items) {
   return [...items].sort((a, b) => (map.get(a?.id) ?? 1e9) - (map.get(b?.id) ?? 1e9));
 }
 
+const EMPTY_LIST = [];
+
 export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
   const id = projectId;
   // Hash-based navigation (Alchemist shell)
@@ -75,9 +79,23 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
     }
   };
 
-  const [project, setProject] = useState(null);
-  const [checklist, setChecklist] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Server data: TanStack Query. Refreshed every 3 s, whenever you return to the tab, and after every change.
+  // A failed first load is retried up to 3 times (the database can lag just after an upload) before an error is shown.
+  const queryClient = useQueryClient();
+  const liveOptions = { retry: 3, retryDelay: (n) => 600 * (n + 1), refetchInterval: (q) => (q.state.status === 'error' ? false : 3000), refetchOnWindowFocus: 'always' };
+  const projectQ = useProject(id, liveOptions);
+  const checklistQ = useChecklist(id, liveOptions);
+  const project = projectQ.data ?? null;
+  const checklist = checklistQ.data ?? EMPTY_LIST;
+  const loading = projectQ.isPending || checklistQ.isPending;
+  const fetchError = (projectQ.isError || checklistQ.isError) && !project;
+  /** Refresh this project's data (used as the callback the modals call after they change something). */
+  const fetchProjectData = () => queryClient.invalidateQueries({ queryKey: keys.preq.project(id) });
+  const updateItem = useUpdateItem();
+  const verifyItem = useVerifyItem();
+  const aiVerifyItem = useAiVerifyItem();
+  const retryAnalysis = useRetryAnalysis(id);
+  const signoff = useInternalSignoff(id);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
@@ -95,12 +113,11 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
   const [isCredsModalOpen, setIsCredsModalOpen] = useState(false);
   const [escalateModalItem, setEscalateModalItem] = useState(null);
   const [rejectModalItem, setRejectModalItem] = useState(null);
-  const [fetchError, setFetchError] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [internalSignoffLoading, setInternalSignoffLoading] = useState(false);
-  const [verifyingId, setVerifyingId] = useState(null);
+  const internalSignoffLoading = signoff.isPending;
+  const verifyingId = aiVerifyItem.isPending ? aiVerifyItem.variables : null;
 
-  const [reanalyzing, setReanalyzing] = useState(false);
+  const reanalyzing = retryAnalysis.isPending;
   const [editingOwnerId, setEditingOwnerId] = useState(null);
   const [ownerDraft, setOwnerDraft] = useState('');
   const [savingOwnerId, setSavingOwnerId] = useState(null);
@@ -118,14 +135,11 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
     }
     setSavingOwnerId(item.id);
     try {
-      const response = await axios.put(`${API_URL}/items/${item.id}`, { owner: nextOwner });
-      setChecklist(current => current.map(row => row.id === item.id
-        ? { ...row, ...(response.data || {}), owner: nextOwner }
-        : row));
+      await updateItem.mutateAsync({ id: item.id, patch: { owner: nextOwner } });
       setEditingOwnerId(null);
       setOwnerDraft('');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Could not update prerequisite owner.');
+      alert(apiError(err, 'Could not update prerequisite owner.'));
     } finally {
       setSavingOwnerId(null);
     }
@@ -134,46 +148,12 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
 
   const handleRetryAnalysis = async () => {
     if (reanalyzing) return;
-    setReanalyzing(true);
     try {
-      const res = await axios.post(`${API_URL}/projects/${id}/retry-analysis`, {});
-      alert(`✅ Reanalysis complete: ${res.data.checklist_count} evidence-backed prerequisites extracted.`);
-      await fetchProjectData();
+      const data = await retryAnalysis.mutateAsync();
+      alert(`✅ Reanalysis complete: ${data.checklist_count} evidence-backed prerequisites extracted.`);
     } catch (err) {
       console.error("Retry analysis error:", err);
-      const errMsg = err.response?.data?.detail || err.message || "Failed to reanalyze SOW.";
-      alert(`⚠️ Reanalysis failed: ${errMsg}`);
-      await fetchProjectData();
-    } finally {
-      setReanalyzing(false);
-    }
-  };
-
-  const fetchProjectData = async (retryCount = 0) => {
-    try {
-      const [projRes, checkRes] = await Promise.all([
-        axios.get(`${API_URL}/projects/${id}`),
-        axios.get(`${API_URL}/projects/${id}/checklist`)
-      ]);
-      setProject(projRes.data);
-      setChecklist(Array.isArray(checkRes.data) ? checkRes.data : []);
-      setFetchError(false);
-      setLoading(false);
-    } catch (err) {
-      if (axios.isCancel(err) || err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
-        return;
-      }
-      console.warn(`Error fetching project data (attempt ${retryCount + 1}):`, err);
-      
-      // Auto-retry up to 3 times in case of DB sync delay after document upload
-      if (retryCount < 3) {
-        setTimeout(() => {
-          fetchProjectData(retryCount + 1);
-        }, 600 * (retryCount + 1));
-        return;
-      }
-      setFetchError(true);
-      setLoading(false);
+      alert(`⚠️ Reanalysis failed: ${apiError(err, "Failed to reanalyze SOW.")}`);
     }
   };
 
@@ -181,55 +161,26 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
     if (!(await dialog.confirm('This confirms the Pre-Req Tracker has been reviewed and is cleared for client handover.', { title: 'Confirm internal sign-off?', variant: 'question', confirmLabel: 'Sign off' }))) {
       return;
     }
-    setInternalSignoffLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/projects/${id}/internal-review-signoff`, {
+      await signoff.mutateAsync({
         reviewer: "Akshay (Team Lead) & Thasleema (Project Manager)",
         action: "Approve",
         notes: "Pre-Req Tracker verified internally according to minimal standard format."
       });
-      setProject(res.data);
       alert("✅ Internal Governance Sign-off complete! Tracker is verified and approved by Akshay (Team Lead) & Thasleema (Project Manager).");
     } catch (err) {
       console.error("Signoff error:", err);
       alert("Failed to complete internal sign-off.");
-    } finally {
-      setInternalSignoffLoading(false);
     }
   };
 
   const isInternalApproved = project?.internal_review_status?.includes("Approved");
 
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    setFetchError(false);
-    fetchProjectData();
-
-    const interval = setInterval(() => {
-      if (isMounted && !fetchError) {
-        fetchProjectData(0);
-      }
-    }, 3000);
-
-    const onFocus = () => {
-      if (isMounted) fetchProjectData(0);
-    };
-    window.addEventListener('focus', onFocus);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [id]);
-
   const handleManualVerify = async (itemId) => {
     try {
-      await axios.post(`${API_URL}/items/${itemId}/verify`);
-      fetchProjectData();
+      await verifyItem.mutateAsync(itemId);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Verification failed');
+      alert(apiError(err, 'Verification failed'));
     }
   };
 
@@ -237,23 +188,18 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
     e?.stopPropagation();
     const nextStatus = item.status === 'Verified' ? 'Pending' : 'Verified';
     try {
-      await axios.put(`${API_URL}/items/${item.id}`, { status: nextStatus });
-      fetchProjectData();
+      await updateItem.mutateAsync({ id: item.id, patch: { status: nextStatus } });
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.detail || 'Failed to update milestone status');
+      alert(apiError(err, 'Failed to update milestone status'));
     }
   };
 
   const handleAiVerify = async (itemId) => {
-    setVerifyingId(itemId);
     try {
-      await axios.post(`${API_URL}/items/${itemId}/ai-verify`);
-      fetchProjectData();
+      await aiVerifyItem.mutateAsync(itemId);
     } catch (err) {
-      alert(err.response?.data?.detail || 'AI verification failed');
-    } finally {
-      setVerifyingId(null);
+      alert(apiError(err, 'AI verification failed'));
     }
   };
 
@@ -351,9 +297,8 @@ export const ProjectDashboard = ({ projectId, onOpenCopilot }) => {
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.75rem', flexWrap: 'wrap' }}>
           <button 
             onClick={() => {
-              setLoading(true);
-              setFetchError(false);
-              fetchProjectData(0);
+              projectQ.refetch();
+              checklistQ.refetch();
             }} 
             style={{
               background: '#ED7D31',
